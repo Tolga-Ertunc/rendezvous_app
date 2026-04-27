@@ -1,0 +1,11 @@
+.DS_Store
+
+# Environment files
+.env
+.env.*
+
+# Local AI/editor tooling
+.codex/
+.codex*
+.cursor/
+.claude/
