@@ -1,9 +1,9 @@
 "use client"
 
-import { FormEvent, useState } from "react"
+import { FormEvent, Suspense, useState } from "react"
 import { CalendarDays, UserPlus } from "lucide-react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button, buttonVariants } from "@/components/ui/button"
@@ -17,30 +17,50 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ApiError } from "@/lib/api-client"
-import { register } from "@/lib/auth-api"
+import { checkEmailAvailability, register } from "@/lib/auth-api"
 import { clearAuthTokens } from "@/lib/auth-storage"
 import { cn } from "@/lib/utils"
 
 export default function RegisterPage() {
+  return (
+    <Suspense fallback={null}>
+      <RegisterPageContent />
+    </Suspense>
+  )
+}
+
+function RegisterPageContent() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const isBookingReason = searchParams.get("reason") === "booking"
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [confirmPassword, setConfirmPassword] = useState("")
+  const [emailError, setEmailError] = useState("")
   const [error, setError] = useState("")
+  const [isCheckingEmail, setIsCheckingEmail] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setError("")
+    setEmailError("")
+
+    if (password !== confirmPassword) {
+      setError("Passwords do not match.")
+      return
+    }
+
     setIsSubmitting(true)
 
     try {
-      await register(email, password)
-      router.push("/dashboard")
+      await register(email, password, confirmPassword)
+      router.push("/")
     } catch (caughtError) {
       clearAuthTokens()
 
       if (caughtError instanceof ApiError && caughtError.status === 409) {
-        setError("An account with this email already exists.")
+        setEmailError("An account with this email already exists.")
       } else if (caughtError instanceof ApiError && caughtError.status === 400) {
         setError("Registration failed. Check the email and password rules.")
       } else {
@@ -48,6 +68,30 @@ export default function RegisterPage() {
       }
     } finally {
       setIsSubmitting(false)
+    }
+  }
+
+  async function handleEmailBlur() {
+    const nextEmail = email.trim()
+
+    if (!nextEmail) {
+      setEmailError("")
+      return
+    }
+
+    setIsCheckingEmail(true)
+    setEmailError("")
+
+    try {
+      const availability = await checkEmailAvailability(nextEmail)
+
+      if (!availability.isAvailable) {
+        setEmailError("An account with this email already exists.")
+      }
+    } catch {
+      setEmailError("")
+    } finally {
+      setIsCheckingEmail(false)
     }
   }
 
@@ -72,8 +116,9 @@ export default function RegisterPage() {
           <CardHeader>
             <CardTitle>Start booking</CardTitle>
             <CardDescription>
-              Create a customer account, then book appointments or create a
-              business from the dashboard.
+              {isBookingReason
+                ? "Create a customer account before requesting this appointment."
+                : "Create a customer account to request appointments."}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -87,9 +132,25 @@ export default function RegisterPage() {
                   autoComplete="email"
                   placeholder="user@example.com"
                   value={email}
-                  onChange={(event) => setEmail(event.target.value)}
+                  onBlur={handleEmailBlur}
+                  onChange={(event) => {
+                    setEmail(event.target.value)
+                    setEmailError("")
+                  }}
+                  aria-invalid={Boolean(emailError)}
+                  aria-describedby={emailError ? "email-error" : undefined}
                   required
                 />
+                {isCheckingEmail ? (
+                  <p className="text-xs text-muted-foreground">
+                    Checking email availability.
+                  </p>
+                ) : null}
+                {emailError ? (
+                  <p id="email-error" className="text-xs text-destructive">
+                    {emailError}
+                  </p>
+                ) : null}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="password">Password</Label>
@@ -100,6 +161,18 @@ export default function RegisterPage() {
                   autoComplete="new-password"
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="confirm-password">Confirm password</Label>
+                <Input
+                  id="confirm-password"
+                  name="confirm-password"
+                  type="password"
+                  autoComplete="new-password"
+                  value={confirmPassword}
+                  onChange={(event) => setConfirmPassword(event.target.value)}
                   required
                 />
               </div>
@@ -114,7 +187,7 @@ export default function RegisterPage() {
                 className="w-full"
                 type="submit"
                 size="lg"
-                disabled={isSubmitting}
+                disabled={isSubmitting || isCheckingEmail || Boolean(emailError)}
               >
                 <UserPlus data-icon="inline-start" className="size-4" />
                 {isSubmitting ? "Creating account" : "Create account"}

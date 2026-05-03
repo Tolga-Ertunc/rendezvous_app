@@ -61,18 +61,24 @@ public class AuthController : ControllerBase
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(request.Email)
-            || string.IsNullOrWhiteSpace(request.Password))
+            || string.IsNullOrWhiteSpace(request.Password)
+            || string.IsNullOrWhiteSpace(request.ConfirmPassword))
         {
             return BadRequest(new { message = "Email and password are required." });
         }
 
-        var existingUser = await userManager.FindByEmailAsync(request.Email);
+        if (request.Password != request.ConfirmPassword)
+        {
+            return BadRequest(new { message = "Passwords do not match." });
+        }
+
+        var email = request.Email.Trim();
+        var existingUser = await userManager.FindByEmailAsync(email);
         if (existingUser is not null)
         {
             return Conflict(new { message = "A user with this email already exists." });
         }
 
-        var email = request.Email.Trim();
         var user = new ApplicationUser
         {
             PublicNumber = await publicNumberGenerator.GenerateAsync(cancellationToken),
@@ -102,6 +108,22 @@ public class AuthController : ControllerBase
         }
 
         return await CreateTokenResponseAsync(user, cancellationToken);
+    }
+
+    [HttpGet("email-availability")]
+    public async Task<ActionResult<EmailAvailabilityResponse>> EmailAvailability([FromQuery] string email)
+    {
+        if (string.IsNullOrWhiteSpace(email))
+        {
+            return BadRequest(new { message = "Email is required." });
+        }
+
+        var normalizedEmail = email.Trim();
+        var existingUser = await userManager.FindByEmailAsync(normalizedEmail);
+
+        return new EmailAvailabilityResponse(
+            normalizedEmail,
+            existingUser is null);
     }
 
     [HttpPost("refresh")]
@@ -285,7 +307,12 @@ public sealed record LoginRequest(
 
 public sealed record RegisterRequest(
     string Email,
-    string Password);
+    string Password,
+    string ConfirmPassword);
+
+public sealed record EmailAvailabilityResponse(
+    string Email,
+    bool IsAvailable);
 
 public sealed record RefreshTokenRequest(
     string RefreshToken);

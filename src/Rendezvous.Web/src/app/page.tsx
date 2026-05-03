@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation"
+import { BusinessDiscoveryPage } from "@/components/public/business-discovery-page"
 
 export default function Home() {
-  redirect("/businesses")
+  return <BusinessDiscoveryPage />
 }

@@ -68,6 +68,20 @@ public class OwnerBusinessesController : ControllerBase
             return BadRequest(new { message = "Business name is required." });
         }
 
+        var hasOwnerAccess = await dbContext.BusinessMemberships
+            .AsNoTracking()
+            .AnyAsync(
+                membership =>
+                    membership.UserId == userId.Value
+                    && membership.Role == BusinessMembershipRole.Owner
+                    && membership.Status == BusinessMembershipStatus.Active,
+                cancellationToken);
+
+        if (!hasOwnerAccess)
+        {
+            return Forbid();
+        }
+
         var business = new Business
         {
             OwnerUserId = userId.Value,

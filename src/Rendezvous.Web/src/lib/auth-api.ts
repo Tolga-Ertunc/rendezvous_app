@@ -26,6 +26,11 @@ export type AuthTokenResponse = {
   user: AuthenticatedUser
 }
 
+export type EmailAvailability = {
+  email: string
+  isAvailable: boolean
+}
+
 export type OwnerBusiness = {
   id: string
   name: string
@@ -205,16 +210,29 @@ export async function login(email: string, password: string) {
   return response
 }
 
-export async function register(email: string, password: string) {
+export async function register(
+  email: string,
+  password: string,
+  confirmPassword: string
+) {
   const response = await apiRequest<AuthTokenResponse>("/auth/register", {
     method: "POST",
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ email, password, confirmPassword }),
     skipAuthRefresh: true,
   })
 
   setAuthTokens(response.accessToken, response.refreshToken)
 
   return response
+}
+
+export function checkEmailAvailability(email: string) {
+  const searchParams = new URLSearchParams({ email })
+
+  return apiRequest<EmailAvailability>(
+    `/auth/email-availability?${searchParams.toString()}`,
+    { skipAuthRefresh: true }
+  )
 }
 
 export async function refreshSession(refreshToken: string) {

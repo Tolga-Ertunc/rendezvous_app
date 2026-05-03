@@ -70,7 +70,7 @@ export function OwnerOnboardingPanel({
         <CardDescription>
           {hasOwnerBusiness
             ? "Create another business under this account."
-            : "Create a business and become its owner. New businesses start as pending approval."}
+            : "Create another business under this owner account. New businesses start as pending approval."}
         </CardDescription>
       </CardHeader>
       <CardContent>

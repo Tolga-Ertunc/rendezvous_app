@@ -24,22 +24,17 @@ type PublicBusinessListProps = {
 export function PublicBusinessList({ businesses }: PublicBusinessListProps) {
   if (businesses.length === 0) {
     return (
-      <Card className="mx-auto w-full max-w-xl">
-        <CardHeader>
-          <CardTitle>No businesses yet</CardTitle>
-          <CardDescription>
-            Approved businesses will appear here when they are available.
-          </CardDescription>
-        </CardHeader>
-      </Card>
+      <p className="rounded-lg border border-border bg-background px-4 py-3 text-sm text-muted-foreground">
+        No active businesses are available.
+      </p>
     )
   }
 
   return (
-    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+    <div className="grid gap-3 md:grid-cols-2">
       {businesses.map((business) => (
         <Card key={business.id} className="min-w-0">
-          <CardHeader>
+          <CardHeader className="space-y-4">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0 space-y-2">
                 <div className="flex items-center gap-2">
@@ -55,13 +50,35 @@ export function PublicBusinessList({ businesses }: PublicBusinessListProps) {
               </div>
               <Badge variant="outline">{business.type}</Badge>
             </div>
+            <div className="space-y-2">
+              <p className="text-xs font-medium uppercase tracking-normal text-muted-foreground">
+                Active services
+              </p>
+              {business.services.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {business.services.map((service) => (
+                    <Badge
+                      key={service.id}
+                      variant="secondary"
+                      className="max-w-full truncate"
+                    >
+                      {service.name} - {service.durationMinutes} min
+                    </Badge>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  No active services listed.
+                </p>
+              )}
+            </div>
           </CardHeader>
           <CardContent>
             <Link
               href={`/businesses/${business.id}`}
               className={cn(buttonVariants({ variant: "outline" }), "w-full")}
             >
-              View services
+              View business
               <ArrowRight data-icon="inline-end" className="size-4" />
             </Link>
           </CardContent>
@@ -94,7 +111,7 @@ export function PublicBusinessDetailView({
               </CardDescription>
             </div>
             <Link
-              href="/businesses"
+              href="/"
               className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
             >
               <ArrowLeft data-icon="inline-start" className="size-4" />

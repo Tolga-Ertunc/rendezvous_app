@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { CalendarDays, Clock, UsersRound } from "lucide-react"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -35,6 +36,7 @@ export function BookingAvailabilityPanel({
   businessId,
   services,
 }: BookingAvailabilityPanelProps) {
+  const router = useRouter()
   const [selectedServiceId, setSelectedServiceId] = useState(
     services[0]?.id ?? ""
   )
@@ -57,7 +59,7 @@ export function BookingAvailabilityPanel({
   )
 
   useEffect(() => {
-    if (!isSignedIn || !selectedServiceId || !date) {
+    if (!selectedServiceId || !date) {
       return
     }
 
@@ -106,6 +108,11 @@ export function BookingAvailabilityPanel({
   }, [businessId, date, isSignedIn, selectedServiceId])
 
   async function handleRequest(slot: AvailabilitySlot, staffMemberId: string) {
+    if (!isSignedIn) {
+      router.push("/register?reason=booking")
+      return
+    }
+
     setRequestingStaffKey(`${slot.startsAtUtc}-${staffMemberId}`)
     setError("")
     setSuccessMessage("")
@@ -151,92 +158,95 @@ export function BookingAvailabilityPanel({
       <CardContent className="space-y-5">
         {!isSignedIn ? (
           <Alert>
-            <AlertTitle>Sign in required</AlertTitle>
+            <AlertTitle>Create an account to request a time</AlertTitle>
             <AlertDescription>
-              Guests can review businesses and services. Appointment times are
-              visible after sign in.
+              Guests can review available times. Select a staff member to sign
+              up before sending an appointment request.
             </AlertDescription>
           </Alert>
-        ) : (
-          <>
-            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_180px]">
-              <div className="space-y-2">
-                <Label>Service</Label>
-                <div className="flex flex-wrap gap-2">
-                  {services.map((service) => (
-                    <Button
-                      key={service.id}
-                      type="button"
-                      variant={
-                        service.id === selectedServiceId ? "default" : "outline"
-                      }
-                      onClick={() => setSelectedServiceId(service.id)}
-                    >
-                      {service.name}
-                    </Button>
-                  ))}
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="availability-date">Date</Label>
-                <Input
-                  id="availability-date"
-                  type="date"
-                  value={date}
-                  min={getTodayValue()}
-                  onChange={(event) => setDate(event.target.value)}
-                />
-              </div>
+        ) : null}
+
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_180px]">
+          <div className="space-y-2">
+            <Label>Service</Label>
+            <div className="flex flex-wrap gap-2">
+              {services.map((service) => (
+                <Button
+                  key={service.id}
+                  type="button"
+                  variant={
+                    service.id === selectedServiceId ? "default" : "outline"
+                  }
+                  onClick={() => setSelectedServiceId(service.id)}
+                >
+                  {service.name}
+                </Button>
+              ))}
             </div>
-
-            {selectedService ? (
-              <div className="flex flex-wrap gap-2 text-sm text-muted-foreground">
-                <Badge variant="outline">
-                  {selectedService.durationMinutes} min
-                </Badge>
-                <Badge variant="outline">
-                  {selectedService.basePriceAmount}{" "}
-                  {selectedService.currencyCode}
-                </Badge>
-              </div>
-            ) : null}
-
-            {error ? (
-              <Alert className="border-destructive/30 bg-destructive/5 text-destructive">
-                <AlertTitle>Availability unavailable</AlertTitle>
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            ) : null}
-
-            {successMessage ? (
-              <Alert>
-                <AlertTitle>Request sent</AlertTitle>
-                <AlertDescription>{successMessage}</AlertDescription>
-              </Alert>
-            ) : null}
-
-            {isLoading ? (
-              <p className="text-sm leading-6 text-muted-foreground">
-                Loading available times.
-              </p>
-            ) : availability ? (
-              <AvailabilitySlotList
-                slots={availability.slots}
-                requestingStaffKey={requestingStaffKey}
-                onRequest={handleRequest}
-              />
-            ) : null}
-          </>
-        )}
-
-        <div className="flex flex-wrap gap-2">
-          <Link
-            href="/login"
-            className={cn(buttonVariants({ variant: "outline" }))}
-          >
-            Sign in
-          </Link>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="availability-date">Date</Label>
+            <Input
+              id="availability-date"
+              type="date"
+              value={date}
+              min={getTodayValue()}
+              onChange={(event) => setDate(event.target.value)}
+            />
+          </div>
         </div>
+
+        {selectedService ? (
+          <div className="flex flex-wrap gap-2 text-sm text-muted-foreground">
+            <Badge variant="outline">{selectedService.durationMinutes} min</Badge>
+            <Badge variant="outline">
+              {selectedService.basePriceAmount} {selectedService.currencyCode}
+            </Badge>
+          </div>
+        ) : null}
+
+        {error ? (
+          <Alert className="border-destructive/30 bg-destructive/5 text-destructive">
+            <AlertTitle>Availability unavailable</AlertTitle>
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        ) : null}
+
+        {successMessage ? (
+          <Alert>
+            <AlertTitle>Request sent</AlertTitle>
+            <AlertDescription>{successMessage}</AlertDescription>
+          </Alert>
+        ) : null}
+
+        {isLoading ? (
+          <p className="text-sm leading-6 text-muted-foreground">
+            Loading available times.
+          </p>
+        ) : availability ? (
+          <AvailabilitySlotList
+            slots={availability.slots}
+            requestingStaffKey={requestingStaffKey}
+            onRequest={handleRequest}
+          />
+        ) : null}
+
+        {!isSignedIn ? (
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href="/register"
+              className={cn(buttonVariants({ variant: "default" }))}
+            >
+              Create account
+            </Link>
+            <Link
+              href="/login"
+              className={cn(buttonVariants({ variant: "outline" }))}
+            >
+              Sign in
+            </Link>
+          </div>
+        ) : null}
       </CardContent>
     </Card>
   )

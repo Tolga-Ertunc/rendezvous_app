@@ -4,12 +4,13 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Rendezvous.Domain.Appointments;
 using Rendezvous.Domain.Businesses;
+using Rendezvous.Infrastructure.Identity;
 using Rendezvous.Infrastructure.Persistence;
 
 namespace Rendezvous.Api.Controllers;
 
 [ApiController]
-[Authorize]
+[Authorize(Roles = ApplicationRoles.User)]
 [Route("api/booking/appointment-requests")]
 public class AppointmentRequestsController : ControllerBase
 {

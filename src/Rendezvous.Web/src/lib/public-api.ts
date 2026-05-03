@@ -5,17 +5,21 @@ export type PublicBusiness = {
   name: string
   type: string
   timeZoneId: string
+  services: PublicBusinessSummaryService[]
 }
 
-export type PublicBusinessService = {
+export type PublicBusinessSummaryService = {
   id: string
   name: string
   durationMinutes: number
-  basePriceAmount: number
   currencyCode: string
 }
 
-export type PublicBusinessDetail = PublicBusiness & {
+export type PublicBusinessService = PublicBusinessSummaryService & {
+  basePriceAmount: number
+}
+
+export type PublicBusinessDetail = Omit<PublicBusiness, "services"> & {
   services: PublicBusinessService[]
 }
 

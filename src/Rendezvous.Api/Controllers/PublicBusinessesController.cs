@@ -48,12 +48,40 @@ public class PublicBusinessesController : ControllerBase
             })
             .ToListAsync(cancellationToken);
 
+        var businessIds = businesses.Select(business => business.Id).ToList();
+        var serviceRows = await dbContext.BusinessServices
+            .AsNoTracking()
+            .Where(service => businessIds.Contains(service.BusinessId) && service.IsActive)
+            .OrderBy(service => service.Name)
+            .Select(service => new
+            {
+                service.BusinessId,
+                service.Id,
+                service.Name,
+                service.DurationMinutes,
+                service.CurrencyCode
+            })
+            .ToListAsync(cancellationToken);
+
+        var servicesByBusinessId = serviceRows
+            .GroupBy(service => service.BusinessId)
+            .ToDictionary(
+                group => group.Key,
+                group => (IReadOnlyList<PublicBusinessSummaryServiceResponse>)group
+                    .Select(service => new PublicBusinessSummaryServiceResponse(
+                        service.Id,
+                        service.Name,
+                        service.DurationMinutes,
+                        service.CurrencyCode))
+                    .ToList());
+
         return businesses
             .Select(business => new PublicBusinessSummaryResponse(
                 business.Id,
                 business.Name,
                 business.Type.ToString(),
-                business.TimeZoneId))
+                business.TimeZoneId,
+                servicesByBusinessId.GetValueOrDefault(business.Id, [])))
             .ToList();
     }
 
@@ -102,7 +130,14 @@ public sealed record PublicBusinessSummaryResponse(
     Guid Id,
     string Name,
     string Type,
-    string TimeZoneId);
+    string TimeZoneId,
+    IReadOnlyList<PublicBusinessSummaryServiceResponse> Services);
+
+public sealed record PublicBusinessSummaryServiceResponse(
+    Guid Id,
+    string Name,
+    int DurationMinutes,
+    string CurrencyCode);
 
 public sealed record PublicBusinessDetailResponse(
     Guid Id,

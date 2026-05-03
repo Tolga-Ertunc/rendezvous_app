@@ -1,4 +1,3 @@
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Rendezvous.Domain.Appointments;
@@ -8,7 +7,6 @@ using Rendezvous.Infrastructure.Persistence;
 namespace Rendezvous.Api.Controllers;
 
 [ApiController]
-[Authorize]
 [Route("api/booking/businesses/{businessId:guid}/services/{serviceId:guid}/availability")]
 public class BookingAvailabilityController : ControllerBase
 {

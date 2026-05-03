@@ -64,6 +64,7 @@ export default function DashboardPage() {
     () => user?.roles.includes("Admin") ?? false,
     [user]
   )
+  const showsBusinessAccess = isOwner || isEmployee || isAdmin
 
   useEffect(() => {
     if (!getAccessToken()) {
@@ -179,7 +180,11 @@ export default function DashboardPage() {
   return (
     <DashboardShell
       title="Dashboard"
-      description="Review account access and open read-only business management views."
+      description={
+        showsBusinessAccess
+          ? "Review account access and business management views."
+          : "Review your account and appointments."
+      }
       actions={
         <Button
           type="button"
@@ -211,14 +216,24 @@ export default function DashboardPage() {
 
         <TabsContent value="account">
           <div className="grid gap-4">
-            <div className="grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+            <div
+              className={
+                showsBusinessAccess
+                  ? "grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]"
+                  : "grid gap-4"
+              }
+            >
               <AccountCard user={user} />
-              <MembershipCard user={user} />
+              {showsBusinessAccess ? (
+                <MembershipCard user={user} isAdmin={isAdmin} />
+              ) : null}
             </div>
-            <OwnerOnboardingPanel
-              hasOwnerBusiness={isOwner}
-              onCreated={handleBusinessCreated}
-            />
+            {isOwner ? (
+              <OwnerOnboardingPanel
+                hasOwnerBusiness={isOwner}
+                onCreated={handleBusinessCreated}
+              />
+            ) : null}
           </div>
         </TabsContent>
 
@@ -356,7 +371,13 @@ function AccountCard({ user }: { user: CurrentUser }) {
   )
 }
 
-function MembershipCard({ user }: { user: CurrentUser }) {
+function MembershipCard({
+  user,
+  isAdmin,
+}: {
+  user: CurrentUser
+  isAdmin: boolean
+}) {
   return (
     <Card>
       <CardHeader>
@@ -394,6 +415,14 @@ function MembershipCard({ user }: { user: CurrentUser }) {
               </div>
             ))}
           </div>
+        ) : isAdmin ? (
+          <Alert>
+            <AlertTitle>Admin system access</AlertTitle>
+            <AlertDescription>
+              This account has admin access through dedicated admin routes. It
+              is not a member of a specific business.
+            </AlertDescription>
+          </Alert>
         ) : (
           <Alert>
             <AlertTitle>No business membership</AlertTitle>
