@@ -1,0 +1,538 @@
+import { apiRequest } from "@/lib/api-client"
+import { getRefreshToken, setAuthTokens } from "@/lib/auth-storage"
+
+export type AuthenticatedUser = {
+  id: string
+  publicNumber: number
+  email: string
+  roles: string[]
+}
+
+export type BusinessMembership = {
+  businessId: string
+  businessName: string
+  role: string
+  status: string
+}
+
+export type CurrentUser = AuthenticatedUser & {
+  businessMemberships: BusinessMembership[]
+}
+
+export type AuthTokenResponse = {
+  accessToken: string
+  accessTokenExpiresAtUtc: string
+  refreshToken: string
+  user: AuthenticatedUser
+}
+
+export type OwnerBusiness = {
+  id: string
+  name: string
+  type: string
+  status: string
+  timeZoneId: string
+}
+
+export type BusinessService = {
+  id: string
+  name: string
+  durationMinutes: number
+  basePriceAmount: number
+  currencyCode: string
+  isActive: boolean
+}
+
+export type BusinessStaffMember = {
+  id: string
+  displayName: string
+  isActive: boolean
+}
+
+export type BusinessDetail = OwnerBusiness & {
+  owner?: {
+    id: string
+    publicNumber: number
+    email: string
+  } | null
+  serviceCount?: number
+  staffCount?: number
+  appointmentCount?: number
+  services: BusinessService[]
+  staffMembers: BusinessStaffMember[]
+}
+
+export type OwnerAppointmentRequest = {
+  id: string
+  status: string
+  startsAtUtc: string
+  endsAtUtc: string
+  serviceName: string
+  staffDisplayName: string
+  customerPublicNumber: number
+  priceAmount: number
+  currencyCode: string
+}
+
+export type EmployeeAppointmentRequest = OwnerAppointmentRequest & {
+  businessId: string
+  businessName: string
+}
+
+export type OwnerAppointmentRequestDecision = {
+  id: string
+  status: string
+  autoRejectedCount: number
+}
+
+export type CustomerAppointment = {
+  id: string
+  status: string
+  startsAtUtc: string
+  endsAtUtc: string
+  businessName: string
+  serviceName: string
+  staffDisplayName: string
+  priceAmount: number
+  currencyCode: string
+}
+
+export type CustomerAppointmentDecision = {
+  id: string
+  status: string
+}
+
+export type EmployeeAppointment = {
+  id: string
+  status: string
+  startsAtUtc: string
+  endsAtUtc: string
+  businessId: string
+  businessName: string
+  serviceName: string
+  staffDisplayName: string
+  customerPublicNumber: number
+  priceAmount: number
+  currencyCode: string
+}
+
+export type OwnerAppointment = {
+  id: string
+  status: string
+  startsAtUtc: string
+  endsAtUtc: string
+  serviceName: string
+  staffDisplayName: string
+  customerPublicNumber: number
+  priceAmount: number
+  currencyCode: string
+}
+
+export type AppointmentDecision = {
+  id: string
+  status: string
+}
+
+export type AdminBusinessStatus = {
+  id: string
+  status: string
+}
+
+export type WorkingHour = {
+  dayOfWeek: number
+  isClosed: boolean
+  opensAt: string | null
+  closesAt: string | null
+}
+
+export type OwnerServiceRequest = {
+  name: string
+  durationMinutes: number
+  basePriceAmount: number
+  currencyCode: string
+  isActive: boolean
+}
+
+export type OwnerStaffRequest = {
+  displayName: string
+  isActive: boolean
+}
+
+export type CreateOwnerBusinessRequest = {
+  name: string
+  type: number
+  ownerStaffDisplayName?: string
+}
+
+export type OwnerBusinessInvitation = {
+  id: string
+  email: string
+  staffDisplayName: string
+  role: string
+  status: string
+  createdAtUtc: string
+  expiresAtUtc: string
+  acceptedAtUtc: string | null
+  acceptanceToken: string | null
+}
+
+export type AcceptedBusinessInvitation = {
+  businessId: string
+  businessName: string
+  role: string
+}
+
+export type AdminUser = {
+  id: string
+  publicNumber: number
+  email: string
+  roles: string[]
+}
+
+export type AdminUserDetail = AdminUser & {
+  businessMemberships: BusinessMembership[]
+}
+
+export async function login(email: string, password: string) {
+  const response = await apiRequest<AuthTokenResponse>("/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ email, password }),
+    skipAuthRefresh: true,
+  })
+
+  setAuthTokens(response.accessToken, response.refreshToken)
+
+  return response
+}
+
+export async function register(email: string, password: string) {
+  const response = await apiRequest<AuthTokenResponse>("/auth/register", {
+    method: "POST",
+    body: JSON.stringify({ email, password }),
+    skipAuthRefresh: true,
+  })
+
+  setAuthTokens(response.accessToken, response.refreshToken)
+
+  return response
+}
+
+export async function refreshSession(refreshToken: string) {
+  const response = await apiRequest<AuthTokenResponse>("/auth/refresh", {
+    method: "POST",
+    body: JSON.stringify({ refreshToken }),
+    skipAuthRefresh: true,
+  })
+
+  setAuthTokens(response.accessToken, response.refreshToken)
+
+  return response
+}
+
+export async function logout() {
+  const refreshToken = getRefreshToken()
+
+  if (!refreshToken) {
+    return
+  }
+
+  await apiRequest<void>("/auth/logout", {
+    method: "POST",
+    body: JSON.stringify({ refreshToken }),
+    skipAuthRefresh: true,
+    ignoreNoContent: true,
+  })
+}
+
+export function getCurrentUser() {
+  return apiRequest<CurrentUser>("/auth/me")
+}
+
+export function getOwnerBusinesses() {
+  return apiRequest<OwnerBusiness[]>("/owner/businesses")
+}
+
+export function getOwnerBusiness(businessId: string) {
+  return apiRequest<BusinessDetail>(`/owner/businesses/${businessId}`)
+}
+
+export function createOwnerBusiness(request: CreateOwnerBusinessRequest) {
+  return apiRequest<BusinessDetail>("/owner/businesses", {
+    method: "POST",
+    body: JSON.stringify(request),
+  })
+}
+
+export function getOwnerBusinessInvitations(businessId: string) {
+  return apiRequest<OwnerBusinessInvitation[]>(
+    `/owner/businesses/${businessId}/invitations`
+  )
+}
+
+export function createOwnerBusinessInvitation(
+  businessId: string,
+  request: { email: string; staffDisplayName: string }
+) {
+  return apiRequest<OwnerBusinessInvitation>(
+    `/owner/businesses/${businessId}/invitations`,
+    {
+      method: "POST",
+      body: JSON.stringify(request),
+    }
+  )
+}
+
+export function acceptBusinessInvitation(token: string) {
+  return apiRequest<AcceptedBusinessInvitation>("/business-invitations/accept", {
+    method: "POST",
+    body: JSON.stringify({ token }),
+  })
+}
+
+export function getAdminBusinesses(params?: {
+  search?: string
+  status?: string
+  type?: string
+}) {
+  const query = buildQuery(params)
+  return apiRequest<OwnerBusiness[]>(`/admin/businesses${query}`)
+}
+
+export function getAdminBusiness(businessId: string) {
+  return apiRequest<BusinessDetail>(`/admin/businesses/${businessId}`)
+}
+
+export function approveAdminBusiness(businessId: string) {
+  return apiRequest<AdminBusinessStatus>(
+    `/admin/businesses/${businessId}/approve`,
+    { method: "POST" }
+  )
+}
+
+export function suspendAdminBusiness(businessId: string) {
+  return apiRequest<AdminBusinessStatus>(
+    `/admin/businesses/${businessId}/suspend`,
+    { method: "POST" }
+  )
+}
+
+export function rejectAdminBusiness(businessId: string) {
+  return apiRequest<AdminBusinessStatus>(
+    `/admin/businesses/${businessId}/reject`,
+    { method: "POST" }
+  )
+}
+
+export function createOwnerService(
+  businessId: string,
+  request: OwnerServiceRequest
+) {
+  return apiRequest<BusinessService>(`/owner/businesses/${businessId}/services`, {
+    method: "POST",
+    body: JSON.stringify(request),
+  })
+}
+
+export function updateOwnerService(
+  businessId: string,
+  serviceId: string,
+  request: OwnerServiceRequest
+) {
+  return apiRequest<BusinessService>(
+    `/owner/businesses/${businessId}/services/${serviceId}`,
+    {
+      method: "PUT",
+      body: JSON.stringify(request),
+    }
+  )
+}
+
+export function activateOwnerService(businessId: string, serviceId: string) {
+  return apiRequest<BusinessService>(
+    `/owner/businesses/${businessId}/services/${serviceId}/activate`,
+    { method: "POST" }
+  )
+}
+
+export function deactivateOwnerService(businessId: string, serviceId: string) {
+  return apiRequest<BusinessService>(
+    `/owner/businesses/${businessId}/services/${serviceId}/deactivate`,
+    { method: "POST" }
+  )
+}
+
+export function updateOwnerStaff(
+  businessId: string,
+  staffMemberId: string,
+  request: OwnerStaffRequest
+) {
+  return apiRequest<BusinessStaffMember>(
+    `/owner/businesses/${businessId}/staff/${staffMemberId}`,
+    {
+      method: "PUT",
+      body: JSON.stringify(request),
+    }
+  )
+}
+
+export function activateOwnerStaff(businessId: string, staffMemberId: string) {
+  return apiRequest<BusinessStaffMember>(
+    `/owner/businesses/${businessId}/staff/${staffMemberId}/activate`,
+    { method: "POST" }
+  )
+}
+
+export function deactivateOwnerStaff(businessId: string, staffMemberId: string) {
+  return apiRequest<BusinessStaffMember>(
+    `/owner/businesses/${businessId}/staff/${staffMemberId}/deactivate`,
+    { method: "POST" }
+  )
+}
+
+export function getOwnerBusinessWorkingHours(businessId: string) {
+  return apiRequest<WorkingHour[]>(
+    `/owner/businesses/${businessId}/working-hours`
+  )
+}
+
+export function updateOwnerBusinessWorkingHours(
+  businessId: string,
+  workingHours: WorkingHour[]
+) {
+  return apiRequest<WorkingHour[]>(
+    `/owner/businesses/${businessId}/working-hours`,
+    {
+      method: "PUT",
+      body: JSON.stringify(workingHours),
+    }
+  )
+}
+
+export function getOwnerStaffWorkingHours(
+  businessId: string,
+  staffMemberId: string
+) {
+  return apiRequest<WorkingHour[]>(
+    `/owner/businesses/${businessId}/staff/${staffMemberId}/working-hours`
+  )
+}
+
+export function updateOwnerStaffWorkingHours(
+  businessId: string,
+  staffMemberId: string,
+  workingHours: WorkingHour[]
+) {
+  return apiRequest<WorkingHour[]>(
+    `/owner/businesses/${businessId}/staff/${staffMemberId}/working-hours`,
+    {
+      method: "PUT",
+      body: JSON.stringify(workingHours),
+    }
+  )
+}
+
+export function getOwnerAppointmentRequests(businessId: string) {
+  return apiRequest<OwnerAppointmentRequest[]>(
+    `/owner/businesses/${businessId}/appointment-requests`
+  )
+}
+
+export function approveOwnerAppointmentRequest(
+  businessId: string,
+  appointmentId: string
+) {
+  return apiRequest<OwnerAppointmentRequestDecision>(
+    `/owner/businesses/${businessId}/appointment-requests/${appointmentId}/approve`,
+    { method: "POST" }
+  )
+}
+
+export function rejectOwnerAppointmentRequest(
+  businessId: string,
+  appointmentId: string
+) {
+  return apiRequest<OwnerAppointmentRequestDecision>(
+    `/owner/businesses/${businessId}/appointment-requests/${appointmentId}/reject`,
+    { method: "POST" }
+  )
+}
+
+export function getEmployeeAppointmentRequests() {
+  return apiRequest<EmployeeAppointmentRequest[]>(
+    "/employee/appointment-requests"
+  )
+}
+
+export function approveEmployeeAppointmentRequest(appointmentId: string) {
+  return apiRequest<OwnerAppointmentRequestDecision>(
+    `/employee/appointment-requests/${appointmentId}/approve`,
+    { method: "POST" }
+  )
+}
+
+export function rejectEmployeeAppointmentRequest(appointmentId: string) {
+  return apiRequest<OwnerAppointmentRequestDecision>(
+    `/employee/appointment-requests/${appointmentId}/reject`,
+    { method: "POST" }
+  )
+}
+
+export function getEmployeeAppointments() {
+  return apiRequest<EmployeeAppointment[]>("/employee/appointments")
+}
+
+export function cancelEmployeeAppointment(appointmentId: string) {
+  return apiRequest<AppointmentDecision>(
+    `/employee/appointments/${appointmentId}/cancel`,
+    { method: "POST" }
+  )
+}
+
+export function getOwnerAppointments(businessId: string) {
+  return apiRequest<OwnerAppointment[]>(
+    `/owner/businesses/${businessId}/appointments`
+  )
+}
+
+export function cancelOwnerAppointment(
+  businessId: string,
+  appointmentId: string
+) {
+  return apiRequest<AppointmentDecision>(
+    `/owner/businesses/${businessId}/appointments/${appointmentId}/cancel`,
+    { method: "POST" }
+  )
+}
+
+export function getCustomerAppointments() {
+  return apiRequest<CustomerAppointment[]>("/customer/appointments")
+}
+
+export function cancelCustomerAppointment(appointmentId: string) {
+  return apiRequest<CustomerAppointmentDecision>(
+    `/customer/appointments/${appointmentId}/cancel`,
+    { method: "POST" }
+  )
+}
+
+export function getAdminUsers(params?: { search?: string }) {
+  const query = buildQuery(params)
+  return apiRequest<AdminUser[]>(`/admin/users${query}`)
+}
+
+export function getAdminUser(userId: string) {
+  return apiRequest<AdminUserDetail>(`/admin/users/${userId}`)
+}
+
+function buildQuery(params?: Record<string, string | undefined>) {
+  const searchParams = new URLSearchParams()
+
+  Object.entries(params ?? {}).forEach(([key, value]) => {
+    if (value && value.trim()) {
+      searchParams.set(key, value.trim())
+    }
+  })
+
+  const query = searchParams.toString()
+  return query ? `?${query}` : ""
+}

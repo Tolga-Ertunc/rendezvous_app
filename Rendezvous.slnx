@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Rendezvous.Api/Rendezvous.Api.csproj" />
+    <Project Path="src/Rendezvous.Application/Rendezvous.Application.csproj" />
+    <Project Path="src/Rendezvous.Domain/Rendezvous.Domain.csproj" />
+    <Project Path="src/Rendezvous.Infrastructure/Rendezvous.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Rendezvous.Tests/Rendezvous.Tests.csproj" />
+  </Folder>
+</Solution>

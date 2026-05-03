@@ -4,7 +4,26 @@
 .env
 .env.*
 
+# Local notes / working docs
+login_info.md
+START_PLAN.md
+*_PLAN.md
+*_NOTES.md
+TODO.md
+scratch.md
+
+# .NET
+bin/
+obj/
+
+# Frontend
+node_modules/
+.next/
+out/
+
 # Local AI/editor tooling
+AGENTS.md
+CLAUDE.md
 .codex/
 .codex*
 .cursor/
