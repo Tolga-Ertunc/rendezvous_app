@@ -1,5 +1,6 @@
 const accessTokenKey = "rendezvous.accessToken"
 const refreshTokenKey = "rendezvous.refreshToken"
+const authStorageChangedEvent = "rendezvous.auth-storage-changed"
 
 function canUseStorage() {
   return typeof window !== "undefined" && typeof window.sessionStorage !== "undefined"
@@ -28,6 +29,7 @@ export function setAuthTokens(accessToken: string, refreshToken: string) {
 
   window.sessionStorage.setItem(accessTokenKey, accessToken)
   window.sessionStorage.setItem(refreshTokenKey, refreshToken)
+  window.dispatchEvent(new Event(authStorageChangedEvent))
 }
 
 export function clearAuthTokens() {
@@ -37,4 +39,15 @@ export function clearAuthTokens() {
 
   window.sessionStorage.removeItem(accessTokenKey)
   window.sessionStorage.removeItem(refreshTokenKey)
+  window.dispatchEvent(new Event(authStorageChangedEvent))
+}
+
+export function subscribeToAuthTokenChanges(onStoreChange: () => void) {
+  window.addEventListener("storage", onStoreChange)
+  window.addEventListener(authStorageChangedEvent, onStoreChange)
+
+  return () => {
+    window.removeEventListener("storage", onStoreChange)
+    window.removeEventListener(authStorageChangedEvent, onStoreChange)
+  }
 }

@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { LogOut, ShieldCheck, UserRound } from "lucide-react"
+import { ShieldCheck, UserRound } from "lucide-react"
 import { useRouter } from "next/navigation"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -27,7 +27,6 @@ import {
   getAdminBusinesses,
   getCurrentUser,
   getOwnerBusinesses,
-  logout,
 } from "@/lib/auth-api"
 import type { CurrentUser, OwnerBusiness } from "@/lib/auth-api"
 import { clearAuthTokens, getAccessToken } from "@/lib/auth-storage"
@@ -42,7 +41,6 @@ export default function DashboardPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isFilteringAdminBusinesses, setIsFilteringAdminBusinesses] =
     useState(false)
-  const [isLoggingOut, setIsLoggingOut] = useState(false)
   const [error, setError] = useState("")
 
   const isOwner = useMemo(
@@ -69,7 +67,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!getAccessToken()) {
-      router.replace("/login")
+      router.replace("/")
       return
     }
 
@@ -118,17 +116,6 @@ export default function DashboardPage() {
     }
   }, [router])
 
-  async function handleLogout() {
-    setIsLoggingOut(true)
-
-    try {
-      await logout()
-    } finally {
-      clearAuthTokens()
-      router.replace("/login")
-    }
-  }
-
   async function handleBusinessCreated() {
     const [currentUser, ownedBusinesses] = await Promise.all([
       getCurrentUser(),
@@ -169,8 +156,8 @@ export default function DashboardPage() {
             <CardDescription>{error}</CardDescription>
           </CardHeader>
           <CardContent>
-            <Button type="button" onClick={() => router.replace("/login")}>
-              Return to sign in
+            <Button type="button" onClick={() => router.replace("/")}>
+              Return home
             </Button>
           </CardContent>
         </Card>
@@ -185,17 +172,6 @@ export default function DashboardPage() {
         showsBusinessAccess
           ? "Review account access and business management views."
           : "Review your account and appointments."
-      }
-      actions={
-        <Button
-          type="button"
-          variant="outline"
-          onClick={handleLogout}
-          disabled={isLoggingOut}
-        >
-          <LogOut data-icon="inline-start" className="size-4" />
-          {isLoggingOut ? "Signing out" : "Sign out"}
-        </Button>
       }
     >
       <Tabs defaultValue="account">

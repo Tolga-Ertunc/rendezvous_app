@@ -71,7 +71,7 @@ export function BusinessDetailPage({ mode }: BusinessDetailPageProps) {
 
   useEffect(() => {
     if (!getAccessToken()) {
-      router.replace("/login")
+      router.replace("/")
       return
     }
 
@@ -93,7 +93,7 @@ export function BusinessDetailPage({ mode }: BusinessDetailPageProps) {
       } catch (caughtError) {
         if (caughtError instanceof ApiError && caughtError.status === 401) {
           clearAuthTokens()
-          router.replace("/login")
+          router.replace("/")
           return
         }
 

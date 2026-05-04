@@ -1,6 +1,7 @@
 import type { ReactNode } from "react"
 import { CalendarDays } from "lucide-react"
 
+import { AuthHeaderActions } from "@/components/auth/auth-header-actions"
 import { Button } from "@/components/ui/button"
 
 type DashboardShellProps = {
@@ -34,7 +35,14 @@ export function DashboardShell({
               </p>
             </div>
           </div>
-          {actions ? <div className="flex shrink-0 gap-2">{actions}</div> : null}
+          <div className="flex shrink-0 flex-wrap gap-2">
+            {actions}
+            <AuthHeaderActions
+              showDashboardLink={false}
+              showGuestLinks={false}
+              logoutRedirectTo="/"
+            />
+          </div>
         </header>
         {children}
       </div>
