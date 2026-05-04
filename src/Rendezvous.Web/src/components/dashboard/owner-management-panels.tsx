@@ -7,6 +7,7 @@ import { CalendarDays, Clock, ListChecks, Save, UsersRound, X } from "lucide-rea
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import { OwnerAvailabilityExceptionsPanel } from "@/components/dashboard/availability-exceptions-panel"
 import {
   Card,
@@ -17,6 +18,13 @@ import {
 } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import {
   activateOwnerService,
   activateOwnerStaff,
@@ -61,7 +69,7 @@ export function OwnerManagementPanels({
   )
 }
 
-function OwnerServicesPanel({
+export function OwnerServicesPanel({
   business,
   onChanged,
 }: {
@@ -309,7 +317,7 @@ function OwnerServicesPanel({
   )
 }
 
-function OwnerStaffPanel({
+export function OwnerStaffPanel({
   business,
   onChanged,
 }: {
@@ -420,7 +428,7 @@ function OwnerStaffPanel({
   )
 }
 
-function OwnerBusinessHoursPanel({ businessId }: { businessId: string }) {
+export function OwnerBusinessHoursPanel({ businessId }: { businessId: string }) {
   const [hours, setHours] = useState<WorkingHour[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [message, setMessage] = useState("")
@@ -480,7 +488,7 @@ function OwnerBusinessHoursPanel({ businessId }: { businessId: string }) {
   )
 }
 
-function OwnerStaffHoursPanel({ business }: { business: BusinessDetail }) {
+export function OwnerStaffHoursPanel({ business }: { business: BusinessDetail }) {
   const firstStaffId = business.staffMembers[0]?.id ?? ""
   const [selectedStaffId, setSelectedStaffId] = useState(firstStaffId)
   const [hours, setHours] = useState<WorkingHour[]>([])
@@ -566,17 +574,21 @@ function OwnerStaffHoursPanel({ business }: { business: BusinessDetail }) {
         ) : (
           <>
             <Field label="Staff member">
-              <select
-                className="h-10 w-full rounded-md border border-input bg-transparent px-3 text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/35"
+              <Select
                 value={selectedStaffId}
-                onChange={(event) => setSelectedStaffId(event.target.value)}
+                onValueChange={setSelectedStaffId}
               >
-                {business.staffMembers.map((staff) => (
-                  <option key={staff.id} value={staff.id}>
-                    {staff.displayName}
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select staff" />
+                </SelectTrigger>
+                <SelectContent>
+                  {business.staffMembers.map((staff) => (
+                    <SelectItem key={staff.id} value={staff.id}>
+                      {staff.displayName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </Field>
             <WorkingHoursEditor
               hours={hours}
@@ -593,7 +605,7 @@ function OwnerStaffHoursPanel({ business }: { business: BusinessDetail }) {
   )
 }
 
-function OwnerAppointmentsPanel({ businessId }: { businessId: string }) {
+export function OwnerAppointmentsPanel({ businessId }: { businessId: string }) {
   const [appointments, setAppointments] = useState<OwnerAppointment[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [actingId, setActingId] = useState("")
@@ -803,14 +815,13 @@ function WorkingHoursEditor({
               {dayLabels[hour.dayOfWeek]}
             </p>
             <label className="flex items-center gap-2 text-sm text-muted-foreground">
-              <input
-                type="checkbox"
+              <Checkbox
                 checked={hour.isClosed}
-                onChange={(event) =>
+                onCheckedChange={(checked) =>
                   updateDay(hour.dayOfWeek, {
-                    isClosed: event.target.checked,
-                    opensAt: event.target.checked ? null : hour.opensAt ?? "09:00",
-                    closesAt: event.target.checked
+                    isClosed: checked === true,
+                    opensAt: checked === true ? null : hour.opensAt ?? "09:00",
+                    closesAt: checked === true
                       ? null
                       : hour.closesAt ?? "18:00",
                   })

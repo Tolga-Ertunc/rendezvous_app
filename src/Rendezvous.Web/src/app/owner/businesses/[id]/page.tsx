@@ -3,7 +3,7 @@
 import { useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
 
-export default function LegacyOwnerBusinessDetailRoute() {
+export default function OwnerBusinessRoute() {
   const params = useParams<{ id: string }>()
   const router = useRouter()
 

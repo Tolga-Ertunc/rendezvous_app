@@ -27,10 +27,8 @@ import type {
 
 export function EmployeeAppointmentRequestsPanel() {
   const [requests, setRequests] = useState<EmployeeAppointmentRequest[]>([])
-  const [appointments, setAppointments] = useState<EmployeeAppointment[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [actingRequestId, setActingRequestId] = useState("")
-  const [actingAppointmentId, setActingAppointmentId] = useState("")
   const [message, setMessage] = useState("")
   const [error, setError] = useState("")
 
@@ -42,14 +40,10 @@ export function EmployeeAppointmentRequestsPanel() {
       setError("")
 
       try {
-        const [nextRequests, nextAppointments] = await Promise.all([
-          getEmployeeAppointmentRequests(),
-          getEmployeeAppointments(),
-        ])
+        const nextRequests = await getEmployeeAppointmentRequests()
 
         if (isMounted) {
           setRequests(nextRequests)
-          setAppointments(nextAppointments)
         }
       } catch {
         if (isMounted) {
@@ -74,12 +68,7 @@ export function EmployeeAppointmentRequestsPanel() {
     setError("")
 
     try {
-      const [nextRequests, nextAppointments] = await Promise.all([
-        getEmployeeAppointmentRequests(),
-        getEmployeeAppointments(),
-      ])
-      setRequests(nextRequests)
-      setAppointments(nextAppointments)
+      setRequests(await getEmployeeAppointmentRequests())
     } catch {
       setError("Appointment requests could not be loaded.")
     } finally {
@@ -123,6 +112,98 @@ export function EmployeeAppointmentRequestsPanel() {
     }
   }
 
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center gap-2">
+          <Clock className="size-4 text-primary" aria-hidden="true" />
+          <CardTitle>Requests</CardTitle>
+        </div>
+        <CardDescription>
+          Approve or reject requests assigned to your staff profile.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <PanelMessages message={message} error={error} />
+        {isLoading ? (
+          <p className="text-sm leading-6 text-muted-foreground">
+            Loading requests.
+          </p>
+        ) : requests.length === 0 ? (
+          <p className="text-sm leading-6 text-muted-foreground">
+            No pending appointment requests.
+          </p>
+        ) : (
+          <div className="grid gap-3">
+            {requests.map((request) => (
+              <EmployeeAppointmentRow
+                key={request.id}
+                item={request}
+                primaryLabel="Approve"
+                secondaryLabel="Reject"
+                actingId={actingRequestId}
+                onPrimary={() => handleApprove(request.id)}
+                onSecondary={() => handleReject(request.id)}
+              />
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+export function EmployeeApprovedAppointmentsPanel() {
+  const [appointments, setAppointments] = useState<EmployeeAppointment[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [actingAppointmentId, setActingAppointmentId] = useState("")
+  const [message, setMessage] = useState("")
+  const [error, setError] = useState("")
+
+  useEffect(() => {
+    let isMounted = true
+
+    async function loadAppointments() {
+      setIsLoading(true)
+      setError("")
+
+      try {
+        const nextAppointments = await getEmployeeAppointments()
+
+        if (isMounted) {
+          setAppointments(nextAppointments)
+        }
+      } catch {
+        if (isMounted) {
+          setError("Appointments could not be loaded.")
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false)
+        }
+      }
+    }
+
+    loadAppointments()
+
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
+  async function refreshAppointments() {
+    setIsLoading(true)
+    setError("")
+
+    try {
+      setAppointments(await getEmployeeAppointments())
+    } catch {
+      setError("Appointments could not be loaded.")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   async function handleCancelAppointment(appointmentId: string) {
     setActingAppointmentId(appointmentId)
     setMessage("")
@@ -131,7 +212,7 @@ export function EmployeeAppointmentRequestsPanel() {
     try {
       await cancelEmployeeAppointment(appointmentId)
       setMessage("Appointment cancelled.")
-      await refreshRequests()
+      await refreshAppointments()
     } catch {
       setError("Appointment could not be cancelled.")
     } finally {
@@ -140,95 +221,42 @@ export function EmployeeAppointmentRequestsPanel() {
   }
 
   return (
-    <div className="grid gap-4">
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <Clock className="size-4 text-primary" aria-hidden="true" />
-            <CardTitle>My pending appointment requests</CardTitle>
+    <Card>
+      <CardHeader>
+        <div className="flex items-center gap-2">
+          <Clock className="size-4 text-primary" aria-hidden="true" />
+          <CardTitle>Appointments</CardTitle>
+        </div>
+        <CardDescription>
+          Upcoming approved appointments can be cancelled until one hour before
+          start.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <PanelMessages message={message} error={error} />
+        {isLoading ? (
+          <p className="text-sm leading-6 text-muted-foreground">
+            Loading appointments.
+          </p>
+        ) : appointments.length === 0 ? (
+          <p className="text-sm leading-6 text-muted-foreground">
+            No approved upcoming appointments.
+          </p>
+        ) : (
+          <div className="grid gap-3">
+            {appointments.map((appointment) => (
+              <EmployeeAppointmentRow
+                key={appointment.id}
+                item={appointment}
+                primaryLabel="Cancel"
+                actingId={actingAppointmentId}
+                onPrimary={() => handleCancelAppointment(appointment.id)}
+              />
+            ))}
           </div>
-          <CardDescription>
-            Requests assigned to your active staff profile can be approved or
-            rejected here.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {message ? (
-            <Alert>
-              <AlertTitle>Updated</AlertTitle>
-              <AlertDescription>{message}</AlertDescription>
-            </Alert>
-          ) : null}
-
-          {error ? (
-            <Alert className="border-destructive/30 bg-destructive/5 text-destructive">
-              <AlertTitle>Appointment action failed</AlertTitle>
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          ) : null}
-
-          {isLoading ? (
-            <p className="text-sm leading-6 text-muted-foreground">
-              Loading employee appointments.
-            </p>
-          ) : requests.length === 0 ? (
-            <p className="text-sm leading-6 text-muted-foreground">
-              There are no pending appointment requests assigned to you.
-            </p>
-          ) : (
-            <div className="grid gap-3">
-              {requests.map((request) => (
-                <EmployeeAppointmentRow
-                  key={request.id}
-                  item={request}
-                  primaryLabel="Approve"
-                  secondaryLabel="Reject"
-                  actingId={actingRequestId}
-                  onPrimary={() => handleApprove(request.id)}
-                  onSecondary={() => handleReject(request.id)}
-                />
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <Clock className="size-4 text-primary" aria-hidden="true" />
-            <CardTitle>My approved appointments</CardTitle>
-          </div>
-          <CardDescription>
-            Upcoming approved appointments can be cancelled until one hour
-            before start.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <p className="text-sm leading-6 text-muted-foreground">
-              Loading approved appointments.
-            </p>
-          ) : appointments.length === 0 ? (
-            <p className="text-sm leading-6 text-muted-foreground">
-              You do not have approved upcoming appointments.
-            </p>
-          ) : (
-            <div className="grid gap-3">
-              {appointments.map((appointment) => (
-                <EmployeeAppointmentRow
-                  key={appointment.id}
-                  item={appointment}
-                  primaryLabel="Cancel"
-                  actingId={actingAppointmentId}
-                  onPrimary={() => handleCancelAppointment(appointment.id)}
-                />
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    </div>
+        )}
+      </CardContent>
+    </Card>
   )
 }
 
@@ -293,6 +321,25 @@ function EmployeeAppointmentRow({
         </div>
       </div>
     </div>
+  )
+}
+
+function PanelMessages({ message, error }: { message: string; error: string }) {
+  return (
+    <>
+      {message ? (
+        <Alert>
+          <AlertTitle>Updated</AlertTitle>
+          <AlertDescription>{message}</AlertDescription>
+        </Alert>
+      ) : null}
+      {error ? (
+        <Alert className="border-destructive/30 bg-destructive/5 text-destructive">
+          <AlertTitle>Action failed</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      ) : null}
+    </>
   )
 }
 

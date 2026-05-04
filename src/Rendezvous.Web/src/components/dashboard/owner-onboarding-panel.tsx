@@ -14,6 +14,13 @@ import {
 } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { ApiError } from "@/lib/api-client"
 import { createOwnerBusiness } from "@/lib/auth-api"
 import type { BusinessDetail } from "@/lib/auth-api"
@@ -99,14 +106,14 @@ export function OwnerOnboardingPanel({
 
           <div className="space-y-2">
             <Label htmlFor="business-type">Business type</Label>
-            <select
-              id="business-type"
-              className="h-10 w-full rounded-md border border-input bg-transparent px-3 text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/35"
-              value="1"
-              disabled
-            >
-              <option value="1">Barber</option>
-            </select>
+            <Select value="1" disabled>
+              <SelectTrigger id="business-type">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="1">Barber</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           {error ? (

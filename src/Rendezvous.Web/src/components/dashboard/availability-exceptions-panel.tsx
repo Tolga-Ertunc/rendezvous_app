@@ -6,6 +6,7 @@ import { CalendarOff, Save, Trash2 } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   Card,
   CardContent,
@@ -23,6 +24,13 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { ApiError } from "@/lib/api-client"
 import {
   createEmployeeAvailabilityException,
@@ -343,62 +351,71 @@ function AvailabilityExceptionsPanel({
           <div className="grid gap-3 md:grid-cols-3">
             {mode === "employee" ? (
               <Field label="Business">
-                <select
-                  className="h-9 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/35"
+                <Select
                   value={draft.businessId}
-                  onChange={(event) =>
-                    setDraft({ ...draft, businessId: event.target.value })
-                  }
+                  onValueChange={(value) => setDraft({ ...draft, businessId: value })}
                 >
-                  {employeeBusinesses.map((membership) => (
-                    <option
-                      key={membership.businessId}
-                      value={membership.businessId}
-                    >
-                      {membership.businessName}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger className="h-9">
+                    <SelectValue placeholder="Select business" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {employeeBusinesses.map((membership) => (
+                      <SelectItem
+                        key={membership.businessId}
+                        value={membership.businessId}
+                      >
+                        {membership.businessName}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </Field>
             ) : (
               <Field label="Type">
-                <select
-                  className="h-9 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/35"
+                <Select
                   value={draft.type}
-                  onChange={(event) =>
+                  onValueChange={(value) =>
                     setDraft({
                       ...draft,
-                      type: event.target.value as ExceptionDraft["type"],
+                      type: value as ExceptionDraft["type"],
                       staffMemberId:
-                        event.target.value === "StaffLeave"
+                        value === "StaffLeave"
                           ? draft.staffMemberId
                           : "",
                     })
                   }
                 >
-                  <option value="BusinessClosed">Business closed</option>
-                  <option value="Holiday">Holiday</option>
-                  <option value="StaffLeave">Staff leave</option>
-                </select>
+                  <SelectTrigger className="h-9">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="BusinessClosed">Business closed</SelectItem>
+                    <SelectItem value="Holiday">Holiday</SelectItem>
+                    <SelectItem value="StaffLeave">Staff leave</SelectItem>
+                  </SelectContent>
+                </Select>
               </Field>
             )}
 
             {mode === "owner" && draft.type === "StaffLeave" ? (
               <Field label="Staff member">
-                <select
-                  className="h-9 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/35"
+                <Select
                   value={draft.staffMemberId}
-                  onChange={(event) =>
-                    setDraft({ ...draft, staffMemberId: event.target.value })
+                  onValueChange={(value) =>
+                    setDraft({ ...draft, staffMemberId: value })
                   }
                 >
-                  <option value="">Select staff</option>
-                  {business?.staffMembers.map((staff) => (
-                    <option key={staff.id} value={staff.id}>
-                      {staff.displayName}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger className="h-9">
+                    <SelectValue placeholder="Select staff" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {business?.staffMembers.map((staff) => (
+                      <SelectItem key={staff.id} value={staff.id}>
+                        {staff.displayName}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </Field>
             ) : null}
 
@@ -413,11 +430,10 @@ function AvailabilityExceptionsPanel({
             </Field>
 
             <label className="flex items-center gap-2 self-end text-sm text-muted-foreground">
-              <input
-                type="checkbox"
+              <Checkbox
                 checked={draft.isFullDay}
-                onChange={(event) =>
-                  setDraft({ ...draft, isFullDay: event.target.checked })
+                onCheckedChange={(checked) =>
+                  setDraft({ ...draft, isFullDay: checked === true })
                 }
               />
               Full day

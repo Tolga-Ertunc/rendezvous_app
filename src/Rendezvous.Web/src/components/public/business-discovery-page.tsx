@@ -13,6 +13,13 @@ import {
 } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { getPublicBusinesses } from "@/lib/public-api"
 import type { PublicBusiness } from "@/lib/public-api"
 
@@ -86,14 +93,15 @@ export function BusinessDiscoveryPage() {
               value={search}
               onChange={(event) => setSearch(event.target.value)}
             />
-            <select
-              className="h-10 rounded-md border border-input bg-transparent px-3 text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/35"
-              value={type}
-              onChange={(event) => setType(event.target.value)}
-            >
-              <option value="">All types</option>
-              <option value="Barber">Barber</option>
-            </select>
+            <Select value={type || "all"} onValueChange={(value) => setType(value === "all" ? "" : value)}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All types</SelectItem>
+                <SelectItem value="Barber">Barber</SelectItem>
+              </SelectContent>
+            </Select>
             <Button type="button" onClick={handleSearch} disabled={isLoading}>
               Search
             </Button>

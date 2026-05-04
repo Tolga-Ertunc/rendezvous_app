@@ -32,13 +32,13 @@ const pageCopy = {
     title: "Owner business detail",
     description: "Review the business and services available to this owner account.",
     eyebrow: "Owner read-only management view.",
-    backHref: "/dashboard",
+    backHref: "/owner",
   },
   admin: {
     title: "Admin business detail",
     description: "Review any business through the separate read-only admin route.",
     eyebrow: "Admin read-only system visibility.",
-    backHref: "/dashboard",
+    backHref: "/admin/businesses",
   },
 } satisfies Record<
   BusinessDetailPageProps["mode"],
@@ -93,13 +93,8 @@ export function BusinessDetailPage({ mode }: BusinessDetailPageProps) {
       } catch (caughtError) {
         if (caughtError instanceof ApiError && caughtError.status === 401) {
           clearAuthTokens()
-          router.replace("/")
-          return
         }
-
-        if (isMounted) {
-          setError("This business view is not available for this account.")
-        }
+        router.replace("/")
       } finally {
         if (isMounted) {
           setIsLoading(false)

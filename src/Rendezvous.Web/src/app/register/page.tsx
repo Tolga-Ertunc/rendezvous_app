@@ -15,6 +15,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ApiError } from "@/lib/api-client"
@@ -39,6 +40,8 @@ function RegisterPageContent() {
   const [confirmPassword, setConfirmPassword] = useState("")
   const [emailError, setEmailError] = useState("")
   const [error, setError] = useState("")
+  const [acceptedTerms, setAcceptedTerms] = useState(false)
+  const [termsError, setTermsError] = useState(false)
   const [isCheckingEmail, setIsCheckingEmail] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const passwordRules = getPasswordRules(password)
@@ -47,9 +50,15 @@ function RegisterPageContent() {
     event.preventDefault()
     setError("")
     setEmailError("")
+    setTermsError(false)
 
     if (password !== confirmPassword) {
       setError("Passwords do not match.")
+      return
+    }
+
+    if (!acceptedTerms) {
+      setTermsError(true)
       return
     }
 
@@ -194,6 +203,45 @@ function RegisterPageContent() {
                   onChange={(event) => setConfirmPassword(event.target.value)}
                   required
                 />
+              </div>
+
+              <div
+                data-invalid={termsError ? true : undefined}
+                className={cn(
+                  "flex gap-3 rounded-lg border border-border bg-background p-3 transition-colors",
+                  termsError && "border-destructive bg-destructive/5"
+                )}
+              >
+                <Checkbox
+                  id="terms"
+                  checked={acceptedTerms}
+                  aria-invalid={termsError}
+                  onCheckedChange={(checked) => {
+                    setAcceptedTerms(checked === true)
+                    if (checked === true) {
+                      setTermsError(false)
+                    }
+                  }}
+                />
+                <div className="grid gap-1.5 leading-none">
+                  <Label
+                    htmlFor="terms"
+                    className={cn(
+                      "text-sm font-medium",
+                      termsError && "text-destructive"
+                    )}
+                  >
+                    Accept terms and conditions
+                  </Label>
+                  <p
+                    className={cn(
+                      "text-sm leading-5 text-muted-foreground",
+                      termsError && "text-destructive"
+                    )}
+                  >
+                    By clicking this checkbox, you agree to the terms.
+                  </p>
+                </div>
               </div>
 
               {error ? (

@@ -10,6 +10,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button, buttonVariants } from "@/components/ui/button"
 import {
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
@@ -73,6 +74,14 @@ export default function LoginPage() {
         <Card className="bg-white/90 shadow-sm backdrop-blur">
           <CardHeader>
             <CardTitle>Welcome back</CardTitle>
+            <CardAction>
+              <Link
+                href="/register"
+                className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+              >
+                Sign Up
+              </Link>
+            </CardAction>
             <CardDescription>
               Use one of the local development accounts to test the current
               authentication flow.
@@ -112,9 +121,9 @@ export default function LoginPage() {
                 </Alert>
               ) : null}
 
-          <Button
-            className="w-full"
-            type="submit"
+              <Button
+                className="w-full"
+                type="submit"
                 size="lg"
                 disabled={isSubmitting}
               >
@@ -126,12 +135,6 @@ export default function LoginPage() {
         </Card>
 
         <div className="flex justify-center gap-2">
-          <Link
-            href="/register"
-            className={cn(buttonVariants({ variant: "link" }))}
-          >
-            Create account
-          </Link>
           <Link
             href="/businesses"
             className={cn(buttonVariants({ variant: "link" }))}
