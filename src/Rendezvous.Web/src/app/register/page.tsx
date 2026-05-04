@@ -1,7 +1,7 @@
 "use client"
 
 import { FormEvent, Suspense, useState } from "react"
-import { CalendarDays, UserPlus } from "lucide-react"
+import { CalendarDays, Check, UserPlus } from "lucide-react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 
@@ -40,6 +40,7 @@ function RegisterPageContent() {
   const [error, setError] = useState("")
   const [isCheckingEmail, setIsCheckingEmail] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const passwordRules = getPasswordRules(password)
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -163,6 +164,20 @@ function RegisterPageContent() {
                   onChange={(event) => setPassword(event.target.value)}
                   required
                 />
+                <div className="grid gap-1 text-xs text-muted-foreground">
+                  {passwordRules.map((rule) => (
+                    <div
+                      key={rule.label}
+                      className={cn(
+                        "flex items-center gap-2",
+                        rule.isMet ? "text-emerald-700" : "text-muted-foreground"
+                      )}
+                    >
+                      <Check className="size-3.5" aria-hidden="true" />
+                      <span>{rule.label}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="confirm-password">Confirm password</Label>
@@ -210,4 +225,25 @@ function RegisterPageContent() {
       </section>
     </main>
   )
+}
+
+function getPasswordRules(password: string) {
+  return [
+    {
+      label: "Min 8 characters",
+      isMet: password.length >= 8,
+    },
+    {
+      label: "Uppercase letter",
+      isMet: /[A-Z]/.test(password),
+    },
+    {
+      label: "At least 1 number",
+      isMet: /\d/.test(password),
+    },
+    {
+      label: "At least 1 special character",
+      isMet: /[^A-Za-z0-9]/.test(password),
+    },
+  ]
 }

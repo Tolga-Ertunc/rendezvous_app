@@ -114,6 +114,36 @@ public class AuthAndBusinessFlowTests : IClassFixture<RendezvousApiFactory>
     }
 
     [Fact]
+    public async Task Register_rejects_password_shorter_than_eight_characters()
+    {
+        var response = await client.PostAsJsonAsync(
+            "/api/auth/register",
+            new
+            {
+                email = "short-password@example.com",
+                password = "Short1!",
+                confirmPassword = "Short1!"
+            });
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task Register_accepts_configured_password_without_lowercase()
+    {
+        var response = await client.PostAsJsonAsync(
+            "/api/auth/register",
+            new
+            {
+                email = "uppercase-password@example.com",
+                password = "PASSWORD1!",
+                confirmPassword = "PASSWORD1!"
+            });
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
     public async Task Register_rejects_duplicate_email()
     {
         await RegisterAsync("duplicate-register@example.com");
