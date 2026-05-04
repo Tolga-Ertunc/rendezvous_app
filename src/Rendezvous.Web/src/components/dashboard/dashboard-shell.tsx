@@ -38,7 +38,6 @@ export function DashboardShell({
           <div className="flex shrink-0 flex-wrap gap-2">
             {actions}
             <AuthHeaderActions
-              showDashboardLink={false}
               showGuestLinks={false}
               logoutRedirectTo="/"
             />

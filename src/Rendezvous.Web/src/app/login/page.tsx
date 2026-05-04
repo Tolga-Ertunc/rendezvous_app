@@ -54,7 +54,7 @@ export default function LoginPage() {
   return (
     <main className="flex min-h-svh items-center justify-center bg-[radial-gradient(circle_at_top,oklch(0.94_0.04_183),transparent_34%),linear-gradient(180deg,oklch(0.99_0_0),oklch(0.96_0.01_220))] px-4 py-10">
       <div className="fixed right-4 top-4 z-10 flex flex-wrap justify-end gap-2">
-        <AuthHeaderActions showGuestLinks={false} />
+        <AuthHeaderActions showDiscoverLink={false} showGuestLinks={false} />
       </div>
       <section className="w-full max-w-[420px] space-y-6">
         <div className="space-y-3 text-center">

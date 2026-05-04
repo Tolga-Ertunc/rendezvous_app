@@ -3,6 +3,7 @@
 import { AppNavigation } from "@/components/layout/app-navigation"
 
 type AuthHeaderActionsProps = {
+  showDiscoverLink?: boolean
   showDashboardLink?: boolean
   showGuestLinks?: boolean
   logoutRedirectTo?: string

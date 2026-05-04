@@ -18,7 +18,6 @@ function NavigationMenu({
       {...props}
     >
       {children}
-      <NavigationMenuViewport />
     </NavigationMenuPrimitive.Root>
   )
 }
@@ -81,6 +80,7 @@ function NavigationMenuContent({
       data-slot="navigation-menu-content"
       className={cn(
         "left-0 top-0 w-full rounded-lg border border-border bg-popover p-2 text-popover-foreground shadow-md data-[motion=from-end]:animate-in data-[motion=from-start]:animate-in data-[motion=to-end]:animate-out data-[motion=to-start]:animate-out md:absolute md:w-auto",
+        "absolute right-0 top-full mt-2 w-max rounded-lg border border-border bg-popover p-2 text-popover-foreground shadow-md data-[motion=from-end]:animate-in data-[motion=from-start]:animate-in data-[motion=to-end]:animate-out data-[motion=to-start]:animate-out",
         className
       )}
       {...props}
@@ -101,24 +101,6 @@ function NavigationMenuLink({
       )}
       {...props}
     />
-  )
-}
-
-function NavigationMenuViewport({
-  className,
-  ...props
-}: React.ComponentProps<typeof NavigationMenuPrimitive.Viewport>) {
-  return (
-    <div className="absolute left-0 top-full flex justify-center">
-      <NavigationMenuPrimitive.Viewport
-        data-slot="navigation-menu-viewport"
-        className={cn(
-          "origin-top-center relative mt-2 h-[var(--radix-navigation-menu-viewport-height)] w-full overflow-hidden rounded-lg border border-border bg-popover text-popover-foreground shadow-md transition-[width,height] duration-200 data-[state=closed]:animate-out data-[state=open]:animate-in md:w-[var(--radix-navigation-menu-viewport-width)]",
-          className
-        )}
-        {...props}
-      />
-    </div>
   )
 }
 

@@ -33,12 +33,14 @@ import {
 import { cn } from "@/lib/utils"
 
 type AppNavigationProps = {
+  showDiscoverLink?: boolean
   showGuestLinks?: boolean
   showDashboardLink?: boolean
   logoutRedirectTo?: string
 }
 
 export function AppNavigation({
+  showDiscoverLink = true,
   showGuestLinks = true,
   showDashboardLink = true,
   logoutRedirectTo,
@@ -136,12 +138,14 @@ export function AppNavigation({
     <div className="flex flex-1 flex-wrap items-center justify-end gap-2">
       <NavigationMenu className="max-w-full justify-end">
         <NavigationMenuList>
-          <NavigationLink
-            href="/"
-            label="Discover"
-            icon={Building2}
-            active={pathname === "/" || pathname.startsWith("/businesses")}
-          />
+          {showDiscoverLink ? (
+            <NavigationLink
+              href="/"
+              label="Discover"
+              icon={Building2}
+              active={pathname === "/" || pathname.startsWith("/businesses")}
+            />
+          ) : null}
           {user ? (
             <>
               <NavigationLink
