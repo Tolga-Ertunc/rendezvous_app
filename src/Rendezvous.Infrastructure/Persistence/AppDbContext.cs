@@ -21,6 +21,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<Guid
     public DbSet<BusinessInvitation> BusinessInvitations => Set<BusinessInvitation>();
     public DbSet<BusinessMembership> BusinessMemberships => Set<BusinessMembership>();
     public DbSet<BusinessWorkingHour> BusinessWorkingHours => Set<BusinessWorkingHour>();
+    public DbSet<AvailabilityException> AvailabilityExceptions => Set<AvailabilityException>();
     public DbSet<BusinessService> BusinessServices => Set<BusinessService>();
     public DbSet<StaffMember> StaffMembers => Set<StaffMember>();
     public DbSet<StaffWorkingHour> StaffWorkingHours => Set<StaffWorkingHour>();

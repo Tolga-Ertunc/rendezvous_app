@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Rendezvous.Domain.Appointments;
+using Rendezvous.Domain.Availability;
 using Rendezvous.Domain.Businesses;
+using Rendezvous.Api.Services;
 using Rendezvous.Infrastructure.Persistence;
 
 namespace Rendezvous.Api.Controllers;
@@ -12,10 +14,14 @@ public class BookingAvailabilityController : ControllerBase
 {
     private static readonly TimeSpan SlotStep = TimeSpan.FromMinutes(15);
     private readonly AppDbContext dbContext;
+    private readonly AvailabilityExceptionService availabilityExceptionService;
 
-    public BookingAvailabilityController(AppDbContext dbContext)
+    public BookingAvailabilityController(
+        AppDbContext dbContext,
+        AvailabilityExceptionService availabilityExceptionService)
     {
         this.dbContext = dbContext;
+        this.availabilityExceptionService = availabilityExceptionService;
     }
 
     [HttpGet]
@@ -117,6 +123,11 @@ public class BookingAvailabilityController : ControllerBase
         var dayStartUtc = ConvertLocalToUtc(date, TimeOnly.MinValue, timeZone);
         var dayEndUtc = ConvertLocalToUtc(date.AddDays(1), TimeOnly.MinValue, timeZone);
         var staffIds = staffWorkingRows.Select(row => row.StaffMemberId).ToList();
+        var availabilityExceptions = await availabilityExceptionService.GetExceptionsForAvailabilityAsync(
+            businessId,
+            staffIds,
+            date,
+            cancellationToken);
         var approvedAppointments = await dbContext.Appointments
             .AsNoTracking()
             .Where(appointment =>
@@ -138,8 +149,10 @@ public class BookingAvailabilityController : ControllerBase
             businessWorkingHour.ClosesAt,
             staffWorkingRows,
             approvedAppointments,
+            availabilityExceptions,
             duration,
-            DateTimeOffset.UtcNow);
+            DateTimeOffset.UtcNow,
+            availabilityExceptionService);
 
         return new BookingAvailabilityResponse(
             date,
@@ -155,8 +168,10 @@ public class BookingAvailabilityController : ControllerBase
         TimeOnly businessClosesAt,
         IReadOnlyList<StaffWorkingRow> staffWorkingRows,
         IReadOnlyList<AppointmentBusyRange> approvedAppointments,
+        IReadOnlyList<AvailabilityException> availabilityExceptions,
         TimeSpan duration,
-        DateTimeOffset nowUtc)
+        DateTimeOffset nowUtc,
+        AvailabilityExceptionService availabilityExceptionService)
     {
         var slots = new Dictionary<SlotKey, List<AvailableStaffResponse>>();
 
@@ -177,6 +192,15 @@ public class BookingAvailabilityController : ControllerBase
                 }
 
                 if (HasApprovedOverlap(staffWorkingRow.StaffMemberId, startsAtUtc, endsAtUtc, approvedAppointments))
+                {
+                    continue;
+                }
+
+                if (availabilityExceptionService.IsSlotBlocked(
+                    staffWorkingRow.StaffMemberId,
+                    current,
+                    slotEnd,
+                    availabilityExceptions))
                 {
                     continue;
                 }

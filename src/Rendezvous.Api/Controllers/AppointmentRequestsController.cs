@@ -2,7 +2,9 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Rendezvous.Api.Services;
 using Rendezvous.Domain.Appointments;
+using Rendezvous.Domain.Availability;
 using Rendezvous.Domain.Businesses;
 using Rendezvous.Infrastructure.Identity;
 using Rendezvous.Infrastructure.Persistence;
@@ -16,10 +18,14 @@ public class AppointmentRequestsController : ControllerBase
 {
     private static readonly TimeSpan SlotStep = TimeSpan.FromMinutes(15);
     private readonly AppDbContext dbContext;
+    private readonly AvailabilityExceptionService availabilityExceptionService;
 
-    public AppointmentRequestsController(AppDbContext dbContext)
+    public AppointmentRequestsController(
+        AppDbContext dbContext,
+        AvailabilityExceptionService availabilityExceptionService)
     {
         this.dbContext = dbContext;
+        this.availabilityExceptionService = availabilityExceptionService;
     }
 
     [HttpPost]
@@ -119,6 +125,21 @@ public class AppointmentRequestsController : ControllerBase
             || staffWorkingHour is null
             || localStartTime < Max(businessWorkingHour.OpensAt, staffWorkingHour.StartsAt)
             || localEndTime > Min(businessWorkingHour.ClosesAt, staffWorkingHour.EndsAt))
+        {
+            return BadRequest(new { message = "Selected slot is not available." });
+        }
+
+        var availabilityExceptions = await availabilityExceptionService.GetExceptionsForAvailabilityAsync(
+            request.BusinessId,
+            [request.StaffMemberId],
+            localDate,
+            cancellationToken);
+
+        if (availabilityExceptionService.IsSlotBlocked(
+            request.StaffMemberId,
+            localStartTime,
+            localEndTime,
+            availabilityExceptions))
         {
             return BadRequest(new { message = "Selected slot is not available." });
         }

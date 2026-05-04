@@ -17,6 +17,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Input } from "@/components/ui/input"
 import { AdminUsersPanel } from "@/components/dashboard/admin-users-panel"
+import { EmployeeAvailabilityExceptionsPanel } from "@/components/dashboard/availability-exceptions-panel"
 import { BusinessList } from "@/components/dashboard/business-components"
 import { CustomerAppointmentsPanel } from "@/components/dashboard/customer-appointments-panel"
 import { DashboardShell } from "@/components/dashboard/dashboard-shell"
@@ -243,7 +244,12 @@ export default function DashboardPage() {
 
         {isEmployee ? (
           <TabsContent value="employee-requests">
-            <EmployeeAppointmentRequestsPanel />
+            <div className="grid gap-4">
+              <EmployeeAppointmentRequestsPanel />
+              <EmployeeAvailabilityExceptionsPanel
+                memberships={user.businessMemberships}
+              />
+            </div>
           </TabsContent>
         ) : null}
 

@@ -36,6 +36,7 @@ builder.Services.AddScoped<AuthTokenService>();
 builder.Services.AddScoped<AppointmentExpirationService>();
 builder.Services.AddScoped<InvitationTokenService>();
 builder.Services.AddScoped<PublicNumberGenerator>();
+builder.Services.AddScoped<AvailabilityExceptionService>();
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>

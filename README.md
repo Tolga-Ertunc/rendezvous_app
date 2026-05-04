@@ -25,9 +25,9 @@ The expected customer booking flow is:
 5. Select a specific available staff member.
 6. Submit an appointment request.
 
-The frontend starts this flow with a public business discovery area at `/businesses`. It reads from public API endpoints only, shows approved businesses and active services, and leaves appointment request creation for a later booking slice.
+The frontend starts this flow with a public business discovery area at `/`. The legacy `/businesses` route redirects to the same discovery experience for old links. It reads from public API endpoints only and shows approved businesses with active services.
 
-Available appointment slots are not public. Authenticated users can read booking availability for an approved business and active service from the business detail page; guests can only see business and service information. A signed-in customer can submit a pending appointment request from an available slot and staff member, but the appointment is not real until the business approves it.
+Available appointment slots are public for approved businesses and active services, so guests can review dates, times, and available staff before creating an account. Guests still cannot create appointment requests. If a guest selects a staff member for a slot, the UI routes them to registration instead of sending a booking request. A signed-in customer can submit a pending appointment request from an available slot and staff member, but the appointment is not real until the business approves it.
 
 Pending requests do not block a slot. Multiple customers may request the same staff member and time. When one request is approved, the system must reject or prevent approval of overlapping requests for the same staff member.
 

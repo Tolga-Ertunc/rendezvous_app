@@ -1,7 +1,9 @@
 using System.Net;
 using System.Net.Http.Json;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Rendezvous.Domain.Appointments;
 using Rendezvous.Domain.Availability;
 using Rendezvous.Domain.Services;
 using Rendezvous.Domain.Staff;
@@ -81,6 +83,200 @@ public class AuthAndBusinessFlowTests : IClassFixture<RendezvousApiFactory>
         var appointmentRequest = await response.Content.ReadFromJsonAsync<AppointmentRequestResponse>();
 
         appointmentRequest!.Status.Should().Be("Pending");
+    }
+
+    [Fact]
+    public async Task Business_full_day_exception_closes_booking_availability()
+    {
+        var (ownerToken, owner) = await RegisterAndGetCurrentUserAsync("closed-day-owner@example.com");
+        var setup = await CreateBookableBusinessAsync(owner.Id, "Closed Day Barber");
+        await AddOwnerMembershipAsync(owner.Id, setup.BusinessId);
+        client.DefaultRequestHeaders.Authorization = new("Bearer", ownerToken);
+
+        var createResponse = await client.PostAsJsonAsync(
+            $"/api/owner/businesses/{setup.BusinessId}/availability-exceptions",
+            new
+            {
+                type = "BusinessClosed",
+                date = setup.LocalDate,
+                isFullDay = true
+            });
+
+        createResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+
+        client.DefaultRequestHeaders.Authorization = null;
+        var availability = await client.GetFromJsonAsync<BookingAvailabilityResponse>(
+            $"/api/booking/businesses/{setup.BusinessId}/services/{setup.ServiceId}/availability?date={setup.LocalDate:yyyy-MM-dd}");
+
+        availability!.Slots.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Staff_leave_removes_only_that_staff_member_from_availability()
+    {
+        var (ownerToken, owner) = await RegisterAndGetCurrentUserAsync("staff-leave-owner@example.com");
+        var setup = await CreateBookableBusinessAsync(owner.Id, "Staff Leave Barber");
+        await AddOwnerMembershipAsync(owner.Id, setup.BusinessId);
+        var secondStaffId = await AddStaffMemberAsync(setup.BusinessId, owner.Id, setup.LocalDate, "Second Barber");
+        client.DefaultRequestHeaders.Authorization = new("Bearer", ownerToken);
+
+        var createResponse = await client.PostAsJsonAsync(
+            $"/api/owner/businesses/{setup.BusinessId}/availability-exceptions",
+            new
+            {
+                staffMemberId = setup.StaffMemberId,
+                type = "StaffLeave",
+                date = setup.LocalDate,
+                isFullDay = false,
+                startsAt = "09:00",
+                endsAt = "09:30"
+            });
+
+        createResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+
+        client.DefaultRequestHeaders.Authorization = null;
+        var availability = await client.GetFromJsonAsync<BookingAvailabilityResponse>(
+            $"/api/booking/businesses/{setup.BusinessId}/services/{setup.ServiceId}/availability?date={setup.LocalDate:yyyy-MM-dd}");
+        var firstSlot = availability!.Slots.Single(slot => slot.StartsAtLocal == "09:00");
+
+        firstSlot.StaffMembers.Should().NotContain(staff => staff.StaffMemberId == setup.StaffMemberId);
+        firstSlot.StaffMembers.Should().Contain(staff => staff.StaffMemberId == secondStaffId);
+    }
+
+    [Fact]
+    public async Task Appointment_request_rejects_slot_blocked_by_exception()
+    {
+        var (ownerToken, owner) = await RegisterAndGetCurrentUserAsync("blocked-slot-owner@example.com");
+        var setup = await CreateBookableBusinessAsync(owner.Id, "Blocked Slot Barber");
+        await AddOwnerMembershipAsync(owner.Id, setup.BusinessId);
+        client.DefaultRequestHeaders.Authorization = new("Bearer", ownerToken);
+
+        await client.PostAsJsonAsync(
+            $"/api/owner/businesses/{setup.BusinessId}/availability-exceptions",
+            new
+            {
+                staffMemberId = setup.StaffMemberId,
+                type = "StaffLeave",
+                date = setup.LocalDate,
+                isFullDay = false,
+                startsAt = "09:00",
+                endsAt = "09:30"
+            });
+
+        var customerToken = await RegisterAsync("blocked-slot-customer@example.com");
+        client.DefaultRequestHeaders.Authorization = new("Bearer", customerToken);
+        var response = await client.PostAsJsonAsync(
+            "/api/booking/appointment-requests",
+            new
+            {
+                businessId = setup.BusinessId,
+                serviceId = setup.ServiceId,
+                staffMemberId = setup.StaffMemberId,
+                startsAtUtc = setup.StartsAtUtc
+            });
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task Exception_conflict_requires_confirmation_and_cancels_active_appointments_when_confirmed()
+    {
+        var (ownerToken, owner) = await RegisterAndGetCurrentUserAsync("exception-conflict-owner@example.com");
+        var setup = await CreateBookableBusinessAsync(owner.Id, "Conflict Barber");
+        await AddOwnerMembershipAsync(owner.Id, setup.BusinessId);
+        var appointmentIds = await AddAppointmentsAsync(owner.Id, setup);
+        client.DefaultRequestHeaders.Authorization = new("Bearer", ownerToken);
+
+        var request = new
+        {
+            type = "BusinessClosed",
+            date = setup.LocalDate,
+            isFullDay = false,
+            startsAt = "09:00",
+            endsAt = "10:00"
+        };
+        var conflictResponse = await client.PostAsJsonAsync(
+            $"/api/owner/businesses/{setup.BusinessId}/availability-exceptions",
+            request);
+
+        conflictResponse.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        var conflict = await conflictResponse.Content.ReadFromJsonAsync<AvailabilityExceptionConflictResponse>();
+        conflict!.AppointmentCount.Should().Be(2);
+
+        var confirmedResponse = await client.PostAsJsonAsync(
+            $"/api/owner/businesses/{setup.BusinessId}/availability-exceptions",
+            new
+            {
+                type = "BusinessClosed",
+                date = setup.LocalDate,
+                isFullDay = false,
+                startsAt = "09:00",
+                endsAt = "10:00",
+                cancelConflictingAppointments = true
+            });
+
+        confirmedResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var statuses = await dbContext.Appointments
+            .Where(appointment => appointmentIds.Contains(appointment.Id))
+            .ToDictionaryAsync(appointment => appointment.Id, appointment => appointment.Status);
+
+        statuses[appointmentIds[0]].Should().Be(AppointmentStatus.Cancelled);
+        statuses[appointmentIds[1]].Should().Be(AppointmentStatus.Cancelled);
+        statuses[appointmentIds[2]].Should().Be(AppointmentStatus.Completed);
+    }
+
+    [Fact]
+    public async Task Employee_can_manage_only_own_leave_records()
+    {
+        var (_, owner) = await RegisterAndGetCurrentUserAsync("employee-leave-owner@example.com");
+        var setup = await CreateBookableBusinessAsync(owner.Id, "Employee Leave Barber");
+        var (employeeToken, employee) = await RegisterAndGetCurrentUserAsync("employee-leave@example.com");
+        var employeeStaffId = await AddEmployeeAsync(setup.BusinessId, employee.Id, setup.LocalDate);
+        client.DefaultRequestHeaders.Authorization = new("Bearer", employeeToken);
+
+        var createResponse = await client.PostAsJsonAsync(
+            "/api/employee/availability-exceptions",
+            new
+            {
+                businessId = setup.BusinessId,
+                staffMemberId = employeeStaffId,
+                type = "StaffLeave",
+                date = setup.LocalDate,
+                isFullDay = false,
+                startsAt = "10:00",
+                endsAt = "11:00",
+                note = "Personal leave"
+            });
+
+        createResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+        var created = await createResponse.Content.ReadFromJsonAsync<AvailabilityExceptionResponse>();
+
+        var list = await client.GetFromJsonAsync<List<AvailabilityExceptionResponse>>(
+            "/api/employee/availability-exceptions");
+        list.Should().ContainSingle(exception => exception.Id == created!.Id);
+
+        var updateResponse = await client.PutAsJsonAsync(
+            $"/api/employee/availability-exceptions/{created!.Id}",
+            new
+            {
+                businessId = setup.BusinessId,
+                staffMemberId = employeeStaffId,
+                type = "StaffLeave",
+                date = setup.LocalDate,
+                isFullDay = false,
+                startsAt = "11:00",
+                endsAt = "12:00",
+                note = "Updated leave"
+            });
+
+        updateResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var deleteResponse = await client.DeleteAsync(
+            $"/api/employee/availability-exceptions/{created.Id}");
+
+        deleteResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
     }
 
     [Fact]
@@ -303,6 +499,23 @@ public class AuthAndBusinessFlowTests : IClassFixture<RendezvousApiFactory>
         await dbContext.SaveChangesAsync();
     }
 
+    private async Task AddOwnerMembershipAsync(Guid userId, Guid businessId)
+    {
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        dbContext.BusinessMemberships.Add(new BusinessMembership
+        {
+            BusinessId = businessId,
+            UserId = userId,
+            Role = BusinessMembershipRole.Owner,
+            Status = BusinessMembershipStatus.Active,
+            CreatedAtUtc = DateTime.UtcNow
+        });
+
+        await dbContext.SaveChangesAsync();
+    }
+
     private async Task<BookableBusinessSetup> CreateBookableBusinessAsync(
         Guid ownerUserId,
         string businessName)
@@ -364,6 +577,122 @@ public class AuthAndBusinessFlowTests : IClassFixture<RendezvousApiFactory>
             startsAtUtc);
     }
 
+    private async Task<Guid> AddStaffMemberAsync(
+        Guid businessId,
+        Guid userId,
+        DateOnly localDate,
+        string displayName)
+    {
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var staffMember = new StaffMember
+        {
+            BusinessId = businessId,
+            UserId = userId,
+            DisplayName = displayName,
+            IsActive = true
+        };
+
+        dbContext.StaffMembers.Add(staffMember);
+        dbContext.StaffWorkingHours.Add(new StaffWorkingHour
+        {
+            StaffMemberId = staffMember.Id,
+            DayOfWeek = localDate.DayOfWeek,
+            StartsAt = new TimeOnly(9, 0),
+            EndsAt = new TimeOnly(17, 0)
+        });
+
+        await dbContext.SaveChangesAsync();
+
+        return staffMember.Id;
+    }
+
+    private async Task<Guid> AddEmployeeAsync(Guid businessId, Guid employeeUserId, DateOnly localDate)
+    {
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var staffMember = new StaffMember
+        {
+            BusinessId = businessId,
+            UserId = employeeUserId,
+            DisplayName = "Employee Barber",
+            IsActive = true
+        };
+
+        dbContext.BusinessMemberships.Add(new BusinessMembership
+        {
+            BusinessId = businessId,
+            UserId = employeeUserId,
+            Role = BusinessMembershipRole.Employee,
+            Status = BusinessMembershipStatus.Active,
+            CreatedAtUtc = DateTime.UtcNow
+        });
+        dbContext.StaffMembers.Add(staffMember);
+        dbContext.StaffWorkingHours.Add(new StaffWorkingHour
+        {
+            StaffMemberId = staffMember.Id,
+            DayOfWeek = localDate.DayOfWeek,
+            StartsAt = new TimeOnly(9, 0),
+            EndsAt = new TimeOnly(17, 0)
+        });
+
+        await dbContext.SaveChangesAsync();
+
+        return staffMember.Id;
+    }
+
+    private async Task<IReadOnlyList<Guid>> AddAppointmentsAsync(
+        Guid customerUserId,
+        BookableBusinessSetup setup)
+    {
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var appointments = new[]
+        {
+            new Appointment
+            {
+                BusinessId = setup.BusinessId,
+                BusinessServiceId = setup.ServiceId,
+                StaffMemberId = setup.StaffMemberId,
+                CustomerUserId = customerUserId,
+                StartsAtUtc = setup.StartsAtUtc,
+                EndsAtUtc = setup.StartsAtUtc.AddMinutes(30),
+                Status = AppointmentStatus.Pending,
+                PriceAmount = 500,
+                CurrencyCode = "TRY"
+            },
+            new Appointment
+            {
+                BusinessId = setup.BusinessId,
+                BusinessServiceId = setup.ServiceId,
+                StaffMemberId = setup.StaffMemberId,
+                CustomerUserId = customerUserId,
+                StartsAtUtc = setup.StartsAtUtc.AddMinutes(30),
+                EndsAtUtc = setup.StartsAtUtc.AddMinutes(60),
+                Status = AppointmentStatus.Approved,
+                PriceAmount = 500,
+                CurrencyCode = "TRY"
+            },
+            new Appointment
+            {
+                BusinessId = setup.BusinessId,
+                BusinessServiceId = setup.ServiceId,
+                StaffMemberId = setup.StaffMemberId,
+                CustomerUserId = customerUserId,
+                StartsAtUtc = setup.StartsAtUtc.AddMinutes(60),
+                EndsAtUtc = setup.StartsAtUtc.AddMinutes(90),
+                Status = AppointmentStatus.Completed,
+                PriceAmount = 500,
+                CurrencyCode = "TRY"
+            }
+        };
+
+        dbContext.Appointments.AddRange(appointments);
+        await dbContext.SaveChangesAsync();
+
+        return appointments.Select(appointment => appointment.Id).ToList();
+    }
+
     private static DateOnly GetNextBusinessDate()
     {
         var date = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(2);
@@ -390,11 +719,31 @@ public class AuthAndBusinessFlowTests : IClassFixture<RendezvousApiFactory>
         IReadOnlyList<AvailabilitySlotResponse> Slots);
 
     private sealed record AvailabilitySlotResponse(
+        DateTimeOffset StartsAtUtc,
+        DateTimeOffset EndsAtUtc,
+        string StartsAtLocal,
+        string EndsAtLocal,
         IReadOnlyList<AvailableStaffResponse> StaffMembers);
 
     private sealed record AvailableStaffResponse(Guid StaffMemberId);
 
     private sealed record AppointmentRequestResponse(string Status);
+
+    private sealed record AvailabilityExceptionResponse(
+        Guid Id,
+        Guid BusinessId,
+        Guid? StaffMemberId,
+        string? StaffDisplayName,
+        string Type,
+        DateOnly Date,
+        bool IsFullDay,
+        string? StartsAt,
+        string? EndsAt,
+        string? Note,
+        DateTime CreatedAtUtc);
+
+    private sealed record AvailabilityExceptionConflictResponse(
+        int AppointmentCount);
 
     private sealed record BookableBusinessSetup(
         Guid BusinessId,

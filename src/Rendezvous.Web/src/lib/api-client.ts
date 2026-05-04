@@ -14,7 +14,8 @@ type ApiRequestOptions = RequestInit & {
 export class ApiError extends Error {
   constructor(
     message: string,
-    public readonly status: number
+    public readonly status: number,
+    public readonly body?: unknown
   ) {
     super(message)
   }
@@ -47,7 +48,7 @@ async function sendRequest<T>(
   }
 
   if (!response.ok) {
-    throw new ApiError("Request failed", response.status)
+    throw new ApiError("Request failed", response.status, await readErrorBody(response))
   }
 
   if (response.status === 204 || options.ignoreNoContent) {
@@ -55,6 +56,19 @@ async function sendRequest<T>(
   }
 
   return (await response.json()) as T
+}
+
+async function readErrorBody(response: Response) {
+  const contentType = response.headers.get("content-type") ?? ""
+  if (!contentType.includes("application/json")) {
+    return undefined
+  }
+
+  try {
+    return await response.json()
+  } catch {
+    return undefined
+  }
 }
 
 function createHeaders(headers: HeadersInit | undefined) {

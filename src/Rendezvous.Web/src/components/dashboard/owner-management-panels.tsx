@@ -7,6 +7,7 @@ import { CalendarDays, Clock, ListChecks, Save, UsersRound, X } from "lucide-rea
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { OwnerAvailabilityExceptionsPanel } from "@/components/dashboard/availability-exceptions-panel"
 import {
   Card,
   CardContent,
@@ -54,6 +55,7 @@ export function OwnerManagementPanels({
       <OwnerStaffPanel business={business} onChanged={onChanged} />
       <OwnerBusinessHoursPanel businessId={business.id} />
       <OwnerStaffHoursPanel business={business} />
+      <OwnerAvailabilityExceptionsPanel business={business} />
       <OwnerAppointmentsPanel businessId={business.id} />
     </div>
   )

@@ -150,6 +150,45 @@ export type WorkingHour = {
   closesAt: string | null
 }
 
+export type AvailabilityException = {
+  id: string
+  businessId: string
+  staffMemberId: string | null
+  staffDisplayName: string | null
+  type: "BusinessClosed" | "Holiday" | "StaffLeave"
+  date: string
+  isFullDay: boolean
+  startsAt: string | null
+  endsAt: string | null
+  note: string | null
+  createdAtUtc: string
+}
+
+export type AvailabilityExceptionRequest = {
+  businessId?: string
+  staffMemberId?: string | null
+  type: "BusinessClosed" | "Holiday" | "StaffLeave"
+  date: string
+  isFullDay: boolean
+  startsAt?: string | null
+  endsAt?: string | null
+  note?: string | null
+  cancelConflictingAppointments?: boolean
+}
+
+export type AvailabilityExceptionConflict = {
+  message: string
+  appointmentCount: number
+  appointments: {
+    id: string
+    status: string
+    startsAtUtc: string
+    endsAtUtc: string
+    serviceName: string
+    staffDisplayName: string
+  }[]
+}
+
 export type OwnerServiceRequest = {
   name: string
   durationMinutes: number
@@ -435,6 +474,49 @@ export function getOwnerStaffWorkingHours(
   )
 }
 
+export function getOwnerAvailabilityExceptions(businessId: string) {
+  return apiRequest<AvailabilityException[]>(
+    `/owner/businesses/${businessId}/availability-exceptions`
+  )
+}
+
+export function createOwnerAvailabilityException(
+  businessId: string,
+  request: AvailabilityExceptionRequest
+) {
+  return apiRequest<AvailabilityException>(
+    `/owner/businesses/${businessId}/availability-exceptions`,
+    {
+      method: "POST",
+      body: JSON.stringify(request),
+    }
+  )
+}
+
+export function updateOwnerAvailabilityException(
+  businessId: string,
+  exceptionId: string,
+  request: AvailabilityExceptionRequest
+) {
+  return apiRequest<AvailabilityException>(
+    `/owner/businesses/${businessId}/availability-exceptions/${exceptionId}`,
+    {
+      method: "PUT",
+      body: JSON.stringify(request),
+    }
+  )
+}
+
+export function deleteOwnerAvailabilityException(
+  businessId: string,
+  exceptionId: string
+) {
+  return apiRequest<void>(
+    `/owner/businesses/${businessId}/availability-exceptions/${exceptionId}`,
+    { method: "DELETE", ignoreNoContent: true }
+  )
+}
+
 export function updateOwnerStaffWorkingHours(
   businessId: string,
   staffMemberId: string,
@@ -503,6 +585,39 @@ export function cancelEmployeeAppointment(appointmentId: string) {
   return apiRequest<AppointmentDecision>(
     `/employee/appointments/${appointmentId}/cancel`,
     { method: "POST" }
+  )
+}
+
+export function getEmployeeAvailabilityExceptions() {
+  return apiRequest<AvailabilityException[]>("/employee/availability-exceptions")
+}
+
+export function createEmployeeAvailabilityException(
+  request: AvailabilityExceptionRequest
+) {
+  return apiRequest<AvailabilityException>("/employee/availability-exceptions", {
+    method: "POST",
+    body: JSON.stringify(request),
+  })
+}
+
+export function updateEmployeeAvailabilityException(
+  exceptionId: string,
+  request: AvailabilityExceptionRequest
+) {
+  return apiRequest<AvailabilityException>(
+    `/employee/availability-exceptions/${exceptionId}`,
+    {
+      method: "PUT",
+      body: JSON.stringify(request),
+    }
+  )
+}
+
+export function deleteEmployeeAvailabilityException(exceptionId: string) {
+  return apiRequest<void>(
+    `/employee/availability-exceptions/${exceptionId}`,
+    { method: "DELETE", ignoreNoContent: true }
   )
 }
 
