@@ -153,7 +153,7 @@ export function AppNavigation({
                 href="/profile"
                 label="Profile"
                 icon={UserRound}
-                active={pathname === "/profile"}
+                active={isActiveGroup(pathname, "/profile")}
               />
               <NavigationLink
                 href="/appointments"
@@ -236,6 +236,10 @@ export function AppNavigation({
                     <div className="grid w-[220px] gap-1">
                       <MenuPanelLink href="/admin/businesses" title="Businesses" />
                       <MenuPanelLink href="/admin/users" title="Users" />
+                      <MenuPanelLink
+                        href="/admin/owner-applications"
+                        title="Owner applications"
+                      />
                     </div>
                   </NavigationMenuContent>
                 </NavigationMenuItem>

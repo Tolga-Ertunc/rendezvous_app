@@ -730,7 +730,12 @@ export function upsertAdminUserBusinessMembership(
     `/admin/users/${userId}/business-memberships`,
     {
       method: "POST",
-      body: JSON.stringify(request),
+      body: JSON.stringify({
+        businessId: request.businessId,
+        role: request.role === "Owner" ? 1 : 2,
+        status: request.status === "Active" ? 1 : 2,
+        staffDisplayName: request.staffDisplayName,
+      }),
     }
   )
 }

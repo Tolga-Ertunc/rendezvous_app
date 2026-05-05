@@ -91,20 +91,30 @@ public class AdminUsersController : ControllerBase
 
         var roles = await GetRolesAsync([user.Id], cancellationToken);
 
-        var memberships = await dbContext.BusinessMemberships
+        var membershipRows = await dbContext.BusinessMemberships
             .AsNoTracking()
             .Where(membership => membership.UserId == user.Id)
             .Join(
                 dbContext.Businesses.AsNoTracking(),
                 membership => membership.BusinessId,
                 business => business.Id,
-                (membership, business) => new AdminUserBusinessMembershipResponse(
-                    business.Id,
-                    business.Name,
-                    membership.Role.ToString(),
-                    membership.Status.ToString()))
+                (membership, business) => new
+                {
+                    BusinessId = business.Id,
+                    BusinessName = business.Name,
+                    membership.Role,
+                    membership.Status
+                })
             .OrderBy(membership => membership.BusinessName)
             .ToListAsync(cancellationToken);
+
+        var memberships = membershipRows
+            .Select(membership => new AdminUserBusinessMembershipResponse(
+                membership.BusinessId,
+                membership.BusinessName,
+                membership.Role.ToString(),
+                membership.Status.ToString()))
+            .ToList();
 
         return new AdminUserDetailResponse(
             user.Id,
