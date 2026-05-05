@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Rendezvous.Api.Services;
 using Rendezvous.Domain.Appointments;
 using Rendezvous.Domain.Businesses;
+using Rendezvous.Domain.Notifications;
 using Rendezvous.Infrastructure.Persistence;
 
 namespace Rendezvous.Api.Controllers;
@@ -17,13 +18,16 @@ public class EmployeeAppointmentRequestsController : ControllerBase
 {
     private readonly AppDbContext dbContext;
     private readonly AppointmentExpirationService expirationService;
+    private readonly NotificationWriter notificationWriter;
 
     public EmployeeAppointmentRequestsController(
         AppDbContext dbContext,
-        AppointmentExpirationService expirationService)
+        AppointmentExpirationService expirationService,
+        NotificationWriter notificationWriter)
     {
         this.dbContext = dbContext;
         this.expirationService = expirationService;
+        this.notificationWriter = notificationWriter;
     }
 
     [HttpGet]
@@ -99,7 +103,20 @@ public class EmployeeAppointmentRequestsController : ControllerBase
         foreach (var overlappingRequest in overlappingPendingRequests)
         {
             overlappingRequest.Status = AppointmentStatus.Rejected;
+            notificationWriter.Add(
+                overlappingRequest.CustomerUserId,
+                "Appointment request rejected",
+                "Your appointment request was rejected because the slot is no longer available.",
+                NotificationType.AppointmentRequestRejected,
+                "/appointments");
         }
+
+        notificationWriter.Add(
+            appointment.CustomerUserId,
+            "Appointment request approved",
+            "Your appointment request was approved.",
+            NotificationType.AppointmentRequestApproved,
+            "/appointments");
 
         await dbContext.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
@@ -135,6 +152,12 @@ public class EmployeeAppointmentRequestsController : ControllerBase
         }
 
         appointment.Status = AppointmentStatus.Rejected;
+        notificationWriter.Add(
+            appointment.CustomerUserId,
+            "Appointment request rejected",
+            "Your appointment request was rejected.",
+            NotificationType.AppointmentRequestRejected,
+            "/appointments");
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return new EmployeeAppointmentRequestDecisionResponse(

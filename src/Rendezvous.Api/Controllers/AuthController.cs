@@ -47,7 +47,9 @@ public class AuthController : ControllerBase
         }
 
         var user = await userManager.FindByEmailAsync(request.Email);
-        if (user is null || !await userManager.CheckPasswordAsync(user, request.Password))
+        if (user is null
+            || IsSuspended(user)
+            || !await userManager.CheckPasswordAsync(user, request.Password))
         {
             return Unauthorized();
         }
@@ -151,7 +153,7 @@ public class AuthController : ControllerBase
         }
 
         var user = await userManager.FindByIdAsync(storedRefreshToken.UserId.ToString());
-        if (user is null)
+        if (user is null || IsSuspended(user))
         {
             return Unauthorized();
         }
@@ -201,7 +203,7 @@ public class AuthController : ControllerBase
         }
 
         var user = await userManager.FindByIdAsync(userId.Value.ToString());
-        if (user is null)
+        if (user is null || IsSuspended(user))
         {
             return Unauthorized();
         }
@@ -298,6 +300,11 @@ public class AuthController : ControllerBase
         return Guid.TryParse(userIdValue, out var userId)
             ? userId
             : null;
+    }
+
+    private static bool IsSuspended(ApplicationUser user)
+    {
+        return user.LockoutEnd is not null && user.LockoutEnd > DateTimeOffset.UtcNow;
     }
 }
 

@@ -230,11 +230,45 @@ export type AdminUser = {
   id: string
   publicNumber: number
   email: string
+  isSuspended: boolean
   roles: string[]
 }
 
 export type AdminUserDetail = AdminUser & {
   businessMemberships: BusinessMembership[]
+}
+
+export type OwnerOnboardingRequest = {
+  id: string
+  requesterUserId: string
+  businessName: string
+  businessType: string
+  ownerStaffDisplayName: string
+  status: string
+  adminNote: string | null
+  createdBusinessId: string | null
+  createdAtUtc: string
+  reviewedAtUtc: string | null
+}
+
+export type AdminOwnerOnboardingRequest = OwnerOnboardingRequest & {
+  requesterEmail: string
+  requesterPublicNumber: number
+}
+
+export type NotificationItem = {
+  id: string
+  title: string
+  message: string
+  linkUrl: string | null
+  type: string
+  createdAtUtc: string
+  readAtUtc: string | null
+}
+
+export type NotificationsResponse = {
+  unreadCount: number
+  notifications: NotificationItem[]
 }
 
 export async function login(email: string, password: string) {
@@ -655,6 +689,136 @@ export function getAdminUsers(params?: { search?: string }) {
 
 export function getAdminUser(userId: string) {
   return apiRequest<AdminUserDetail>(`/admin/users/${userId}`)
+}
+
+export function suspendAdminUser(userId: string) {
+  return apiRequest<AdminUserDetail>(`/admin/users/${userId}/suspend`, {
+    method: "POST",
+  })
+}
+
+export function unsuspendAdminUser(userId: string) {
+  return apiRequest<AdminUserDetail>(`/admin/users/${userId}/unsuspend`, {
+    method: "POST",
+  })
+}
+
+export function addAdminUserRole(userId: string, roleName: string) {
+  return apiRequest<AdminUserDetail>(`/admin/users/${userId}/roles`, {
+    method: "POST",
+    body: JSON.stringify({ roleName }),
+  })
+}
+
+export function removeAdminUserRole(userId: string, roleName: string) {
+  return apiRequest<AdminUserDetail>(
+    `/admin/users/${userId}/roles/${encodeURIComponent(roleName)}`,
+    { method: "DELETE" }
+  )
+}
+
+export function upsertAdminUserBusinessMembership(
+  userId: string,
+  request: {
+    businessId: string
+    role: "Owner" | "Employee"
+    status: "Active" | "Suspended"
+    staffDisplayName?: string
+  }
+) {
+  return apiRequest<AdminUserDetail>(
+    `/admin/users/${userId}/business-memberships`,
+    {
+      method: "POST",
+      body: JSON.stringify(request),
+    }
+  )
+}
+
+export function activateAdminUserBusinessMembership(
+  userId: string,
+  businessId: string
+) {
+  return apiRequest<AdminUserDetail>(
+    `/admin/users/${userId}/business-memberships/${businessId}/activate`,
+    { method: "POST" }
+  )
+}
+
+export function suspendAdminUserBusinessMembership(
+  userId: string,
+  businessId: string
+) {
+  return apiRequest<AdminUserDetail>(
+    `/admin/users/${userId}/business-memberships/${businessId}/suspend`,
+    { method: "POST" }
+  )
+}
+
+export function getMyOwnerOnboardingRequests() {
+  return apiRequest<OwnerOnboardingRequest[]>("/owner-onboarding-requests/me")
+}
+
+export function createOwnerOnboardingRequest(request: {
+  businessName: string
+  businessType: number
+  ownerStaffDisplayName?: string
+}) {
+  return apiRequest<OwnerOnboardingRequest>("/owner-onboarding-requests", {
+    method: "POST",
+    body: JSON.stringify(request),
+  })
+}
+
+export function getAdminOwnerOnboardingRequests(params?: { status?: string }) {
+  const query = buildQuery(params)
+  return apiRequest<AdminOwnerOnboardingRequest[]>(
+    `/admin/owner-onboarding-requests${query}`
+  )
+}
+
+export function approveAdminOwnerOnboardingRequest(
+  requestId: string,
+  adminNote?: string
+) {
+  return apiRequest<OwnerOnboardingRequest>(
+    `/admin/owner-onboarding-requests/${requestId}/approve`,
+    {
+      method: "POST",
+      body: JSON.stringify({ adminNote }),
+    }
+  )
+}
+
+export function rejectAdminOwnerOnboardingRequest(
+  requestId: string,
+  adminNote?: string
+) {
+  return apiRequest<OwnerOnboardingRequest>(
+    `/admin/owner-onboarding-requests/${requestId}/reject`,
+    {
+      method: "POST",
+      body: JSON.stringify({ adminNote }),
+    }
+  )
+}
+
+export function getNotifications() {
+  return apiRequest<NotificationsResponse>("/notifications")
+}
+
+export function markNotificationRead(notificationId: string) {
+  return apiRequest<void>(`/notifications/${notificationId}/read`, {
+    method: "POST",
+    ignoreNoContent: true,
+  })
+}
+
+export function markAllNotificationsRead() {
+  return apiRequest<void>("/notifications/read-all", {
+    method: "POST",
+    ignoreNoContent: true,
+  })
 }
 
 function buildQuery(params?: Record<string, string | undefined>) {

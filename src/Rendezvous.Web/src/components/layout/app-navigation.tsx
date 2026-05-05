@@ -15,6 +15,7 @@ import {
 } from "lucide-react"
 
 import { SignOutButton } from "@/components/auth/sign-out-button"
+import { NotificationButton } from "@/components/notifications/notification-button"
 import { buttonVariants } from "@/components/ui/button"
 import {
   NavigationMenu,
@@ -245,7 +246,10 @@ export function AppNavigation({
       </NavigationMenu>
 
       {user ? (
-        <SignOutButton redirectTo={logoutRedirectTo} />
+        <>
+          <NotificationButton />
+          <SignOutButton redirectTo={logoutRedirectTo} />
+        </>
       ) : showGuestLinks ? (
         <>
           <Link

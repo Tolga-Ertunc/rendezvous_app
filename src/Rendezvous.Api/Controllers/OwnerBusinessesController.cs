@@ -2,9 +2,8 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Rendezvous.Domain.Availability;
+using Rendezvous.Api.Services;
 using Rendezvous.Domain.Businesses;
-using Rendezvous.Domain.Staff;
 using Rendezvous.Infrastructure.Persistence;
 
 namespace Rendezvous.Api.Controllers;
@@ -15,10 +14,14 @@ namespace Rendezvous.Api.Controllers;
 public class OwnerBusinessesController : ControllerBase
 {
     private readonly AppDbContext dbContext;
+    private readonly BusinessProvisioningService businessProvisioningService;
 
-    public OwnerBusinessesController(AppDbContext dbContext)
+    public OwnerBusinessesController(
+        AppDbContext dbContext,
+        BusinessProvisioningService businessProvisioningService)
     {
         this.dbContext = dbContext;
+        this.businessProvisioningService = businessProvisioningService;
     }
 
     [HttpGet]
@@ -82,41 +85,19 @@ public class OwnerBusinessesController : ControllerBase
             return Forbid();
         }
 
-        var business = new Business
-        {
-            OwnerUserId = userId.Value,
-            Name = request.Name.Trim(),
-            Type = request.Type,
-            Status = BusinessStatus.PendingApproval,
-            TimeZoneId = "Europe/Istanbul"
-        };
-
-        var membership = new BusinessMembership
-        {
-            BusinessId = business.Id,
-            UserId = userId.Value,
-            Role = BusinessMembershipRole.Owner,
-            Status = BusinessMembershipStatus.Active,
-            CreatedAtUtc = DateTime.UtcNow
-        };
-
-        var staffMember = new StaffMember
-        {
-            BusinessId = business.Id,
-            UserId = userId.Value,
-            DisplayName = string.IsNullOrWhiteSpace(request.OwnerStaffDisplayName)
-                ? request.Name.Trim()
-                : request.OwnerStaffDisplayName.Trim(),
-            IsActive = true
-        };
-
-        dbContext.Businesses.Add(business);
-        dbContext.BusinessMemberships.Add(membership);
-        dbContext.StaffMembers.Add(staffMember);
-        AddDefaultBusinessWorkingHours(business.Id);
-        AddDefaultStaffWorkingHours(staffMember.Id);
+        var business = businessProvisioningService.CreateOwnedBusiness(
+            userId.Value,
+            request.Name,
+            request.Type,
+            request.OwnerStaffDisplayName ?? string.Empty,
+            BusinessStatus.PendingApproval);
 
         await dbContext.SaveChangesAsync(cancellationToken);
+
+        var staffMember = await dbContext.StaffMembers
+            .AsNoTracking()
+            .Where(candidate => candidate.BusinessId == business.Id && candidate.UserId == userId.Value)
+            .SingleAsync(cancellationToken);
 
         var response = new OwnerBusinessDetailResponse(
             business.Id,
@@ -220,33 +201,6 @@ public class OwnerBusinessesController : ControllerBase
             : null;
     }
 
-    private void AddDefaultBusinessWorkingHours(Guid businessId)
-    {
-        foreach (var day in Enumerable.Range(1, 6))
-        {
-            dbContext.BusinessWorkingHours.Add(new BusinessWorkingHour
-            {
-                BusinessId = businessId,
-                DayOfWeek = (DayOfWeek)day,
-                OpensAt = new TimeOnly(9, 0),
-                ClosesAt = new TimeOnly(18, 0)
-            });
-        }
-    }
-
-    private void AddDefaultStaffWorkingHours(Guid staffMemberId)
-    {
-        foreach (var day in Enumerable.Range(1, 6))
-        {
-            dbContext.StaffWorkingHours.Add(new StaffWorkingHour
-            {
-                StaffMemberId = staffMemberId,
-                DayOfWeek = (DayOfWeek)day,
-                StartsAt = new TimeOnly(9, 0),
-                EndsAt = new TimeOnly(18, 0)
-            });
-        }
-    }
 }
 
 public sealed record CreateOwnerBusinessRequest(

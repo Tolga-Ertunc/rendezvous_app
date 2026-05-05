@@ -6,6 +6,7 @@ using Rendezvous.Api.Services;
 using Rendezvous.Domain.Appointments;
 using Rendezvous.Domain.Availability;
 using Rendezvous.Domain.Businesses;
+using Rendezvous.Domain.Notifications;
 using Rendezvous.Infrastructure.Identity;
 using Rendezvous.Infrastructure.Persistence;
 
@@ -19,13 +20,16 @@ public class AppointmentRequestsController : ControllerBase
     private static readonly TimeSpan SlotStep = TimeSpan.FromMinutes(15);
     private readonly AppDbContext dbContext;
     private readonly AvailabilityExceptionService availabilityExceptionService;
+    private readonly NotificationWriter notificationWriter;
 
     public AppointmentRequestsController(
         AppDbContext dbContext,
-        AvailabilityExceptionService availabilityExceptionService)
+        AvailabilityExceptionService availabilityExceptionService,
+        NotificationWriter notificationWriter)
     {
         this.dbContext = dbContext;
         this.availabilityExceptionService = availabilityExceptionService;
+        this.notificationWriter = notificationWriter;
     }
 
     [HttpPost]
@@ -45,6 +49,7 @@ public class AppointmentRequestsController : ControllerBase
             .Select(candidate => new
             {
                 candidate.Id,
+                candidate.Name,
                 candidate.TimeZoneId
             })
             .SingleOrDefaultAsync(cancellationToken);
@@ -82,7 +87,8 @@ public class AppointmentRequestsController : ControllerBase
                 && candidate.IsActive)
             .Select(candidate => new
             {
-                candidate.Id
+                candidate.Id,
+                candidate.UserId
             })
             .SingleOrDefaultAsync(cancellationToken);
 
@@ -174,6 +180,33 @@ public class AppointmentRequestsController : ControllerBase
         };
 
         dbContext.Appointments.Add(appointment);
+
+        var ownerUserIds = await dbContext.BusinessMemberships
+            .AsNoTracking()
+            .Where(membership =>
+                membership.BusinessId == request.BusinessId
+                && membership.Role == BusinessMembershipRole.Owner
+                && membership.Status == BusinessMembershipStatus.Active)
+            .Select(membership => membership.UserId)
+            .ToListAsync(cancellationToken);
+
+        var recipientUserIds = ownerUserIds
+            .Append(staffMember.UserId)
+            .Distinct()
+            .ToList();
+
+        foreach (var recipientUserId in recipientUserIds)
+        {
+            notificationWriter.Add(
+                recipientUserId,
+                "New appointment request",
+                $"A new request was created for {business.Name}.",
+                NotificationType.AppointmentRequestCreated,
+                ownerUserIds.Contains(recipientUserId)
+                    ? $"/owner/businesses/{business.Id}/appointments"
+                    : "/employee/requests");
+        }
+
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return Created(
