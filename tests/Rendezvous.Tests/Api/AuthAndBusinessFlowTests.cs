@@ -1,8 +1,10 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.RegularExpressions;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Rendezvous.Api.Email;
 using Rendezvous.Domain.Appointments;
 using Rendezvous.Domain.Availability;
 using Rendezvous.Domain.Services;
@@ -83,6 +85,46 @@ public class AuthAndBusinessFlowTests : IClassFixture<RendezvousApiFactory>
         var appointmentRequest = await response.Content.ReadFromJsonAsync<AppointmentRequestResponse>();
 
         appointmentRequest!.Status.Should().Be("Pending");
+    }
+
+    [Fact]
+    public async Task Owner_approval_creates_customer_notification_and_sends_email()
+    {
+        var (ownerToken, owner) = await RegisterAndGetCurrentUserAsync("approval-email-owner@example.com");
+        var setup = await CreateBookableBusinessAsync(owner.Id, "Approval Email Barber");
+        await AddOwnerMembershipAsync(owner.Id, setup.BusinessId);
+        var customerToken = await RegisterAsync("approval-email-customer@example.com");
+        client.DefaultRequestHeaders.Authorization = new("Bearer", customerToken);
+        var requestResponse = await client.PostAsJsonAsync(
+            "/api/booking/appointment-requests",
+            new
+            {
+                businessId = setup.BusinessId,
+                serviceId = setup.ServiceId,
+                staffMemberId = setup.StaffMemberId,
+                startsAtUtc = setup.StartsAtUtc
+            });
+        var appointmentRequest = await requestResponse.Content.ReadFromJsonAsync<AppointmentRequestResponse>();
+
+        client.DefaultRequestHeaders.Authorization = new("Bearer", ownerToken);
+        var approvalResponse = await client.PostAsync(
+            $"/api/owner/businesses/{setup.BusinessId}/appointment-requests/{appointmentRequest!.Id}/approve",
+            content: null);
+
+        approvalResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        (await dbContext.Notifications
+            .AnyAsync(notification =>
+                notification.Title == "Appointment request approved"
+                && notification.LinkUrl == "/appointments"))
+            .Should()
+            .BeTrue();
+        var emailSender = factory.Services.GetRequiredService<InMemoryEmailSender>();
+        emailSender.SentMessages.Should().Contain(message =>
+            message.To == "approval-email-customer@example.com"
+            && message.Subject == "Your appointment is approved"
+            && message.TextBody.Contains("Approval Email Barber", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -325,6 +367,108 @@ public class AuthAndBusinessFlowTests : IClassFixture<RendezvousApiFactory>
     }
 
     [Fact]
+    public async Task Register_creates_pending_registration_without_real_user()
+    {
+        await StartRegistrationAsync("pending-registration@example.com");
+
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        (await dbContext.PendingEmailRegistrations
+            .AnyAsync(registration => registration.Email == "pending-registration@example.com"))
+            .Should()
+            .BeTrue();
+        (await dbContext.Users
+            .AnyAsync(user => user.Email == "pending-registration@example.com"))
+            .Should()
+            .BeFalse();
+    }
+
+    [Fact]
+    public async Task Confirm_email_rejects_wrong_code_and_increments_attempt_count()
+    {
+        await StartRegistrationAsync("wrong-code@example.com");
+
+        var response = await client.PostAsJsonAsync(
+            "/api/auth/confirm-email",
+            new
+            {
+                email = "wrong-code@example.com",
+                code = "000000"
+            });
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var pendingRegistration = await dbContext.PendingEmailRegistrations
+            .SingleAsync(registration => registration.Email == "wrong-code@example.com");
+
+        pendingRegistration.FailedAttemptCount.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Confirm_email_rejects_expired_code()
+    {
+        await StartRegistrationAsync("expired-code@example.com");
+        var code = GetLatestConfirmationCode("expired-code@example.com");
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var pendingRegistration = await dbContext.PendingEmailRegistrations
+                .SingleAsync(registration => registration.Email == "expired-code@example.com");
+            pendingRegistration.CodeExpiresAtUtc = DateTime.UtcNow.AddMinutes(-1);
+            await dbContext.SaveChangesAsync();
+        }
+
+        var response = await client.PostAsJsonAsync(
+            "/api/auth/confirm-email",
+            new
+            {
+                email = "expired-code@example.com",
+                code
+            });
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task Confirm_email_creates_confirmed_user_with_user_role()
+    {
+        await StartRegistrationAsync("confirm-success@example.com");
+        var code = GetLatestConfirmationCode("confirm-success@example.com");
+
+        var response = await client.PostAsJsonAsync(
+            "/api/auth/confirm-email",
+            new
+            {
+                email = "confirm-success@example.com",
+                code
+            });
+
+        response.StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        var token = await LoginAsync("confirm-success@example.com");
+        client.DefaultRequestHeaders.Authorization = new("Bearer", token);
+        var me = await client.GetFromJsonAsync<CurrentUserResponse>("/api/auth/me");
+
+        me!.Email.Should().Be("confirm-success@example.com");
+        me.Roles.Should().Contain("User");
+    }
+
+    [Fact]
+    public async Task Resend_confirmation_code_is_rate_limited()
+    {
+        await StartRegistrationAsync("resend-limit@example.com");
+
+        var response = await client.PostAsJsonAsync(
+            "/api/auth/resend-confirmation-code",
+            new { email = "resend-limit@example.com" });
+
+        response.StatusCode.Should().Be((HttpStatusCode)429);
+    }
+
+    [Fact]
     public async Task Register_accepts_configured_password_without_lowercase()
     {
         var response = await client.PostAsJsonAsync(
@@ -336,7 +480,7 @@ public class AuthAndBusinessFlowTests : IClassFixture<RendezvousApiFactory>
                 confirmPassword = "PASSWORD1!"
             });
 
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        response.StatusCode.Should().Be(HttpStatusCode.Accepted);
     }
 
     [Fact]
@@ -450,6 +594,48 @@ public class AuthAndBusinessFlowTests : IClassFixture<RendezvousApiFactory>
 
     private async Task<string> RegisterAsync(string email)
     {
+        await StartRegistrationAsync(email);
+        var confirmationCode = GetLatestConfirmationCode(email);
+        var confirmResponse = await client.PostAsJsonAsync(
+            "/api/auth/confirm-email",
+            new
+            {
+                email,
+                code = confirmationCode
+            });
+        confirmResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        var loginResponse = await client.PostAsJsonAsync(
+            "/api/auth/login",
+            new
+            {
+                email,
+                password = "StrongPass123!"
+            });
+
+        loginResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var tokenResponse = await loginResponse.Content.ReadFromJsonAsync<AuthTokenResponse>();
+        return tokenResponse!.AccessToken;
+    }
+
+    private async Task<string> LoginAsync(string email)
+    {
+        var loginResponse = await client.PostAsJsonAsync(
+            "/api/auth/login",
+            new
+            {
+                email,
+                password = "StrongPass123!"
+            });
+
+        loginResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var tokenResponse = await loginResponse.Content.ReadFromJsonAsync<AuthTokenResponse>();
+
+        return tokenResponse!.AccessToken;
+    }
+
+    private async Task StartRegistrationAsync(string email)
+    {
         var response = await client.PostAsJsonAsync(
             "/api/auth/register",
             new
@@ -459,9 +645,18 @@ public class AuthAndBusinessFlowTests : IClassFixture<RendezvousApiFactory>
                 confirmPassword = "StrongPass123!"
             });
 
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var tokenResponse = await response.Content.ReadFromJsonAsync<AuthTokenResponse>();
-        return tokenResponse!.AccessToken;
+        response.StatusCode.Should().Be(HttpStatusCode.Accepted);
+    }
+
+    private string GetLatestConfirmationCode(string email)
+    {
+        var emailSender = factory.Services.GetRequiredService<InMemoryEmailSender>();
+        var message = emailSender.SentMessages
+            .Last(message => message.To.Equals(email, StringComparison.OrdinalIgnoreCase));
+        var match = Regex.Match(message.TextBody, @"\b\d{6}\b");
+
+        match.Success.Should().BeTrue();
+        return match.Value;
     }
 
     private async Task<(string Token, CurrentUserResponse User)> RegisterAndGetCurrentUserAsync(string email)
@@ -727,7 +922,7 @@ public class AuthAndBusinessFlowTests : IClassFixture<RendezvousApiFactory>
 
     private sealed record AvailableStaffResponse(Guid StaffMemberId);
 
-    private sealed record AppointmentRequestResponse(string Status);
+    private sealed record AppointmentRequestResponse(Guid Id, string Status);
 
     private sealed record AvailabilityExceptionResponse(
         Guid Id,

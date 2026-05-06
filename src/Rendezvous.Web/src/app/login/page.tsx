@@ -1,9 +1,9 @@
 "use client"
 
-import { FormEvent, useState } from "react"
+import { FormEvent, Suspense, useState } from "react"
 import { CalendarDays, LogIn } from "lucide-react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 
 import { AuthHeaderActions } from "@/components/auth/auth-header-actions"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -24,7 +24,17 @@ import { clearAuthTokens } from "@/lib/auth-storage"
 import { cn } from "@/lib/utils"
 
 export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginPageContent />
+    </Suspense>
+  )
+}
+
+function LoginPageContent() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const isConfirmed = searchParams.get("confirmed") === "1"
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState("")
@@ -89,6 +99,14 @@ export default function LoginPage() {
           </CardHeader>
           <CardContent>
             <form className="space-y-4" onSubmit={handleSubmit}>
+              {isConfirmed ? (
+                <Alert className="border-emerald-200 bg-emerald-50 text-emerald-800">
+                  <AlertDescription>
+                    Email confirmed. You can sign in now.
+                  </AlertDescription>
+                </Alert>
+              ) : null}
+
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
                 <Input

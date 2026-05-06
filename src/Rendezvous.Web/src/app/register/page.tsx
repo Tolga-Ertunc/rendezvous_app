@@ -1,7 +1,13 @@
 "use client"
 
-import { FormEvent, Suspense, useState } from "react"
-import { CalendarDays, Check, UserPlus } from "lucide-react"
+import { FormEvent, Suspense, useEffect, useState } from "react"
+import {
+  CalendarDays,
+  Check,
+  MailCheck,
+  RotateCcw,
+  UserPlus,
+} from "lucide-react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 
@@ -19,7 +25,12 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ApiError } from "@/lib/api-client"
-import { checkEmailAvailability, register } from "@/lib/auth-api"
+import {
+  checkEmailAvailability,
+  confirmEmail,
+  register,
+  resendConfirmationCode,
+} from "@/lib/auth-api"
 import { clearAuthTokens } from "@/lib/auth-storage"
 import { cn } from "@/lib/utils"
 
@@ -32,7 +43,6 @@ export default function RegisterPage() {
 }
 
 function RegisterPageContent() {
-  const router = useRouter()
   const searchParams = useSearchParams()
   const isBookingReason = searchParams.get("reason") === "booking"
   const [email, setEmail] = useState("")
@@ -44,6 +54,7 @@ function RegisterPageContent() {
   const [termsError, setTermsError] = useState(false)
   const [isCheckingEmail, setIsCheckingEmail] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [pendingEmail, setPendingEmail] = useState("")
   const passwordRules = getPasswordRules(password)
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -66,7 +77,8 @@ function RegisterPageContent() {
 
     try {
       await register(email, password, confirmPassword)
-      router.push("/")
+      clearAuthTokens()
+      setPendingEmail(email.trim())
     } catch (caughtError) {
       clearAuthTokens()
 
@@ -121,22 +133,25 @@ function RegisterPageContent() {
               Rendezvous
             </p>
             <h1 className="text-2xl font-semibold text-foreground">
-              Create your account
+              {pendingEmail ? "Confirm your email" : "Create your account"}
             </h1>
           </div>
         </div>
 
-        <Card className="bg-white/90 shadow-sm backdrop-blur">
-          <CardHeader>
-            <CardTitle>Start booking</CardTitle>
-            <CardDescription>
-              {isBookingReason
-                ? "Create a customer account before requesting this appointment."
-                : "Create a customer account to request appointments."}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form className="space-y-4" onSubmit={handleSubmit}>
+        {pendingEmail ? (
+          <ConfirmRegistrationStep email={pendingEmail} />
+        ) : (
+          <Card className="bg-white/90 shadow-sm backdrop-blur">
+            <CardHeader>
+              <CardTitle>Start booking</CardTitle>
+              <CardDescription>
+                {isBookingReason
+                  ? "Create a customer account before requesting this appointment."
+                  : "Create a customer account to request appointments."}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form className="space-y-4" onSubmit={handleSubmit}>
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
                 <Input
@@ -257,11 +272,12 @@ function RegisterPageContent() {
                 disabled={isSubmitting || isCheckingEmail || Boolean(emailError)}
               >
                 <UserPlus data-icon="inline-start" className="size-4" />
-                {isSubmitting ? "Creating account" : "Create account"}
+                {isSubmitting ? "Sending code" : "Create account"}
               </Button>
-            </form>
-          </CardContent>
-        </Card>
+              </form>
+            </CardContent>
+          </Card>
+        )}
 
         <div className="flex justify-center gap-2">
           <Link href="/login" className={cn(buttonVariants({ variant: "link" }))}>
@@ -276,6 +292,144 @@ function RegisterPageContent() {
         </div>
       </section>
     </main>
+  )
+}
+
+function ConfirmRegistrationStep({ email }: { email: string }) {
+  const router = useRouter()
+  const [code, setCode] = useState("")
+  const [error, setError] = useState("")
+  const [message, setMessage] = useState("")
+  const [cooldownUntil, setCooldownUntil] = useState<number>(
+    () => Date.now() + 60000
+  )
+  const [now, setNow] = useState(() => Date.now())
+  const [isConfirming, setIsConfirming] = useState(false)
+  const [isResending, setIsResending] = useState(false)
+  const secondsRemaining = Math.max(
+    0,
+    Math.ceil((cooldownUntil - now) / 1000)
+  )
+
+  useEffect(() => {
+    const interval = window.setInterval(() => setNow(Date.now()), 1000)
+
+    return () => window.clearInterval(interval)
+  }, [])
+
+  async function handleConfirm(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setError("")
+    setMessage("")
+
+    if (code.trim().length !== 6) {
+      setError("Enter the 6-digit code from your email.")
+      return
+    }
+
+    setIsConfirming(true)
+
+    try {
+      await confirmEmail(email, code.trim())
+      router.push("/login?confirmed=1")
+    } catch (caughtError) {
+      if (caughtError instanceof ApiError && caughtError.status === 400) {
+        setError("The confirmation code is invalid or expired.")
+      } else if (caughtError instanceof ApiError && caughtError.status === 409) {
+        setError("An account with this email already exists.")
+      } else {
+        setError("Email confirmation failed. Try again.")
+      }
+    } finally {
+      setIsConfirming(false)
+    }
+  }
+
+  async function handleResend() {
+    setError("")
+    setMessage("")
+    setIsResending(true)
+
+    try {
+      const response = await resendConfirmationCode(email)
+      setCooldownUntil(new Date(response.resendAvailableAtUtc).getTime())
+      setMessage("A new confirmation code was sent.")
+    } catch (caughtError) {
+      if (caughtError instanceof ApiError && caughtError.status === 429) {
+        setCooldownUntil(Date.now() + 60000)
+        setError("Please wait before requesting a new code.")
+      } else {
+        setError("Could not resend the confirmation code.")
+      }
+    } finally {
+      setIsResending(false)
+    }
+  }
+
+  return (
+    <Card className="bg-white/90 shadow-sm backdrop-blur">
+      <CardHeader>
+        <CardTitle>Enter your code</CardTitle>
+        <CardDescription>
+          We sent a 6-digit confirmation code to your email address.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form className="space-y-4" onSubmit={handleConfirm}>
+          <div className="space-y-2">
+            <Label htmlFor="code">Confirmation code</Label>
+            <Input
+              id="code"
+              name="code"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              maxLength={6}
+              placeholder="123456"
+              value={code}
+              onChange={(event) =>
+                setCode(event.target.value.replace(/\D/g, "").slice(0, 6))
+              }
+              required
+            />
+          </div>
+
+          {message ? (
+            <Alert className="border-emerald-200 bg-emerald-50 text-emerald-800">
+              <AlertDescription>{message}</AlertDescription>
+            </Alert>
+          ) : null}
+
+          {error ? (
+            <Alert className="border-destructive/30 bg-destructive/5 text-destructive">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          ) : null}
+
+          <Button
+            className="w-full"
+            type="submit"
+            size="lg"
+            disabled={isConfirming}
+          >
+            <MailCheck data-icon="inline-start" className="size-4" />
+            {isConfirming ? "Confirming" : "Confirm email"}
+          </Button>
+
+          <Button
+            className="w-full"
+            type="button"
+            variant="outline"
+            disabled={isResending || secondsRemaining > 0}
+            onClick={handleResend}
+          >
+            <RotateCcw data-icon="inline-start" className="size-4" />
+            {secondsRemaining > 0
+              ? `Resend code in ${secondsRemaining}s`
+              : "Resend code"}
+          </Button>
+        </form>
+      </CardContent>
+    </Card>
   )
 }
 

@@ -19,15 +19,18 @@ public class EmployeeAppointmentRequestsController : ControllerBase
     private readonly AppDbContext dbContext;
     private readonly AppointmentExpirationService expirationService;
     private readonly NotificationWriter notificationWriter;
+    private readonly AppointmentEmailService appointmentEmailService;
 
     public EmployeeAppointmentRequestsController(
         AppDbContext dbContext,
         AppointmentExpirationService expirationService,
-        NotificationWriter notificationWriter)
+        NotificationWriter notificationWriter,
+        AppointmentEmailService appointmentEmailService)
     {
         this.dbContext = dbContext;
         this.expirationService = expirationService;
         this.notificationWriter = notificationWriter;
+        this.appointmentEmailService = appointmentEmailService;
     }
 
     [HttpGet]
@@ -120,6 +123,7 @@ public class EmployeeAppointmentRequestsController : ControllerBase
 
         await dbContext.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
+        await appointmentEmailService.SendApprovalEmailAsync(appointment.Id, cancellationToken);
 
         return new EmployeeAppointmentRequestDecisionResponse(
             appointment.Id,

@@ -15,6 +15,7 @@ scratch.md
 # .NET
 bin/
 obj/
+.nuget/
 
 # Frontend
 node_modules/

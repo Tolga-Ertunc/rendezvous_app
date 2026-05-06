@@ -20,20 +20,20 @@ public class AuthController : ControllerBase
     private readonly UserManager<ApplicationUser> userManager;
     private readonly AuthTokenService tokenService;
     private readonly JwtOptions jwtOptions;
-    private readonly PublicNumberGenerator publicNumberGenerator;
+    private readonly EmailConfirmationService emailConfirmationService;
 
     public AuthController(
         AppDbContext dbContext,
         UserManager<ApplicationUser> userManager,
         AuthTokenService tokenService,
         IOptions<JwtOptions> jwtOptions,
-        PublicNumberGenerator publicNumberGenerator)
+        EmailConfirmationService emailConfirmationService)
     {
         this.dbContext = dbContext;
         this.userManager = userManager;
         this.tokenService = tokenService;
         this.jwtOptions = jwtOptions.Value;
-        this.publicNumberGenerator = publicNumberGenerator;
+        this.emailConfirmationService = emailConfirmationService;
     }
 
     [HttpPost("login")]
@@ -48,7 +48,7 @@ public class AuthController : ControllerBase
 
         var user = await userManager.FindByEmailAsync(request.Email);
         if (user is null
-            || IsSuspended(user)
+            || IsBlockedForAuthentication(user)
             || !await userManager.CheckPasswordAsync(user, request.Password))
         {
             return Unauthorized();
@@ -58,7 +58,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("register")]
-    public async Task<ActionResult<AuthTokenResponse>> Register(
+    public async Task<ActionResult<PendingEmailRegistrationResponse>> Register(
         RegisterRequest request,
         CancellationToken cancellationToken)
     {
@@ -75,57 +75,135 @@ public class AuthController : ControllerBase
         }
 
         var email = request.Email.Trim();
-        var existingUser = await userManager.FindByEmailAsync(email);
-        if (existingUser is not null)
+
+        try
+        {
+            var result = await emailConfirmationService.StartAsync(
+                email,
+                request.Password,
+                cancellationToken);
+
+            return Accepted(ToPendingEmailRegistrationResponse(result));
+        }
+        catch (DuplicateEmailException)
         {
             return Conflict(new { message = "A user with this email already exists." });
         }
-
-        var user = new ApplicationUser
-        {
-            PublicNumber = await publicNumberGenerator.GenerateAsync(cancellationToken),
-            UserName = email,
-            Email = email,
-            EmailConfirmed = true
-        };
-
-        var result = await userManager.CreateAsync(user, request.Password);
-        if (!result.Succeeded)
+        catch (InvalidRegistrationException exception)
         {
             return BadRequest(new
             {
                 message = "Registration failed.",
-                errors = result.Errors.Select(error => error.Description).ToList()
+                errors = exception.Errors.Select(error => error.Description).ToList()
             });
         }
-
-        var roleResult = await userManager.AddToRoleAsync(user, ApplicationRoles.User);
-        if (!roleResult.Succeeded)
+        catch (ConfirmationCodeCooldownException exception)
         {
-            await userManager.DeleteAsync(user);
-
             return StatusCode(
-                StatusCodes.Status500InternalServerError,
-                new { message = "Registration role assignment failed." });
+                StatusCodes.Status429TooManyRequests,
+                new { message = "Please wait before requesting a new confirmation code.", exception.ResendAvailableAtUtc });
         }
-
-        return await CreateTokenResponseAsync(user, cancellationToken);
     }
 
     [HttpGet("email-availability")]
-    public async Task<ActionResult<EmailAvailabilityResponse>> EmailAvailability([FromQuery] string email)
+    public async Task<ActionResult<EmailAvailabilityResponse>> EmailAvailability(
+        [FromQuery] string email,
+        CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(email))
         {
             return BadRequest(new { message = "Email is required." });
         }
 
-        var normalizedEmail = email.Trim();
-        var existingUser = await userManager.FindByEmailAsync(normalizedEmail);
+        var trimmedEmail = email.Trim();
+        var normalizedEmail = userManager.NormalizeEmail(trimmedEmail);
+        var existingUser = await userManager.FindByEmailAsync(trimmedEmail);
+        var existingPendingRegistration = await dbContext.PendingEmailRegistrations
+            .AsNoTracking()
+            .AnyAsync(
+                registration =>
+                    registration.NormalizedEmail == normalizedEmail
+                    && registration.CodeExpiresAtUtc > DateTime.UtcNow,
+                cancellationToken);
 
         return new EmailAvailabilityResponse(
-            normalizedEmail,
-            existingUser is null);
+            trimmedEmail,
+            existingUser is null && !existingPendingRegistration);
+    }
+
+    [HttpPost("confirm-email")]
+    public async Task<IActionResult> ConfirmEmail(
+        ConfirmEmailRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Code))
+        {
+            return BadRequest(new { message = "Email and confirmation code are required." });
+        }
+
+        try
+        {
+            await emailConfirmationService.ConfirmAsync(
+                request.Email.Trim(),
+                request.Code.Trim(),
+                cancellationToken);
+
+            return NoContent();
+        }
+        catch (DuplicateEmailException)
+        {
+            return Conflict(new { message = "A user with this email already exists." });
+        }
+        catch (ExpiredConfirmationCodeException)
+        {
+            return BadRequest(new { message = "Confirmation code has expired." });
+        }
+        catch (InvalidConfirmationCodeException)
+        {
+            return BadRequest(new { message = "Confirmation code is invalid." });
+        }
+        catch (InvalidRegistrationException exception)
+        {
+            return BadRequest(new
+            {
+                message = "Registration failed.",
+                errors = exception.Errors.Select(error => error.Description).ToList()
+            });
+        }
+    }
+
+    [HttpPost("resend-confirmation-code")]
+    public async Task<ActionResult<PendingEmailRegistrationResponse>> ResendConfirmationCode(
+        ResendConfirmationCodeRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.Email))
+        {
+            return BadRequest(new { message = "Email is required." });
+        }
+
+        try
+        {
+            var result = await emailConfirmationService.ResendAsync(
+                request.Email.Trim(),
+                cancellationToken);
+
+            return Ok(ToPendingEmailRegistrationResponse(result));
+        }
+        catch (DuplicateEmailException)
+        {
+            return Conflict(new { message = "A user with this email already exists." });
+        }
+        catch (ConfirmationCodeCooldownException exception)
+        {
+            return StatusCode(
+                StatusCodes.Status429TooManyRequests,
+                new { message = "Please wait before requesting a new confirmation code.", exception.ResendAvailableAtUtc });
+        }
+        catch (InvalidConfirmationCodeException)
+        {
+            return BadRequest(new { message = "No pending registration was found for this email." });
+        }
     }
 
     [HttpPost("refresh")]
@@ -153,7 +231,7 @@ public class AuthController : ControllerBase
         }
 
         var user = await userManager.FindByIdAsync(storedRefreshToken.UserId.ToString());
-        if (user is null || IsSuspended(user))
+        if (user is null || IsBlockedForAuthentication(user))
         {
             return Unauthorized();
         }
@@ -203,7 +281,7 @@ public class AuthController : ControllerBase
         }
 
         var user = await userManager.FindByIdAsync(userId.Value.ToString());
-        if (user is null || IsSuspended(user))
+        if (user is null || IsBlockedForAuthentication(user))
         {
             return Unauthorized();
         }
@@ -302,6 +380,20 @@ public class AuthController : ControllerBase
             : null;
     }
 
+    private static PendingEmailRegistrationResponse ToPendingEmailRegistrationResponse(
+        PendingEmailRegistrationResult result)
+    {
+        return new PendingEmailRegistrationResponse(
+            result.Email,
+            result.CodeExpiresAtUtc,
+            result.ResendAvailableAtUtc);
+    }
+
+    private static bool IsBlockedForAuthentication(ApplicationUser user)
+    {
+        return !user.EmailConfirmed || IsSuspended(user);
+    }
+
     private static bool IsSuspended(ApplicationUser user)
     {
         return user.LockoutEnd is not null && user.LockoutEnd > DateTimeOffset.UtcNow;
@@ -316,6 +408,18 @@ public sealed record RegisterRequest(
     string Email,
     string Password,
     string ConfirmPassword);
+
+public sealed record PendingEmailRegistrationResponse(
+    string Email,
+    DateTime CodeExpiresAtUtc,
+    DateTime ResendAvailableAtUtc);
+
+public sealed record ConfirmEmailRequest(
+    string Email,
+    string Code);
+
+public sealed record ResendConfirmationCodeRequest(
+    string Email);
 
 public sealed record EmailAvailabilityResponse(
     string Email,

@@ -19,15 +19,18 @@ public class OwnerAppointmentRequestsController : ControllerBase
     private readonly AppDbContext dbContext;
     private readonly AppointmentExpirationService expirationService;
     private readonly NotificationWriter notificationWriter;
+    private readonly AppointmentEmailService appointmentEmailService;
 
     public OwnerAppointmentRequestsController(
         AppDbContext dbContext,
         AppointmentExpirationService expirationService,
-        NotificationWriter notificationWriter)
+        NotificationWriter notificationWriter,
+        AppointmentEmailService appointmentEmailService)
     {
         this.dbContext = dbContext;
         this.expirationService = expirationService;
         this.notificationWriter = notificationWriter;
+        this.appointmentEmailService = appointmentEmailService;
     }
 
     [HttpGet]
@@ -134,6 +137,7 @@ public class OwnerAppointmentRequestsController : ControllerBase
 
         await dbContext.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
+        await appointmentEmailService.SendApprovalEmailAsync(appointment.Id, cancellationToken);
 
         return new OwnerAppointmentRequestDecisionResponse(
             appointment.Id,

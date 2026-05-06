@@ -31,6 +31,12 @@ export type EmailAvailability = {
   isAvailable: boolean
 }
 
+export type PendingEmailRegistration = {
+  email: string
+  codeExpiresAtUtc: string
+  resendAvailableAtUtc: string
+}
+
 export type OwnerBusiness = {
   id: string
   name: string
@@ -288,15 +294,31 @@ export async function register(
   password: string,
   confirmPassword: string
 ) {
-  const response = await apiRequest<AuthTokenResponse>("/auth/register", {
+  return apiRequest<PendingEmailRegistration>("/auth/register", {
     method: "POST",
     body: JSON.stringify({ email, password, confirmPassword }),
     skipAuthRefresh: true,
   })
+}
 
-  setAuthTokens(response.accessToken, response.refreshToken)
+export function confirmEmail(email: string, code: string) {
+  return apiRequest<void>("/auth/confirm-email", {
+    method: "POST",
+    body: JSON.stringify({ email, code }),
+    skipAuthRefresh: true,
+    ignoreNoContent: true,
+  })
+}
 
-  return response
+export function resendConfirmationCode(email: string) {
+  return apiRequest<PendingEmailRegistration>(
+    "/auth/resend-confirmation-code",
+    {
+      method: "POST",
+      body: JSON.stringify({ email }),
+      skipAuthRefresh: true,
+    }
+  )
 }
 
 export function checkEmailAvailability(email: string) {

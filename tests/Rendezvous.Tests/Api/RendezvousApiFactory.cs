@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -45,7 +46,10 @@ public sealed class RendezvousApiFactory : WebApplicationFactory<Program>
         {
             services.RemoveAll<DbContextOptions<AppDbContext>>();
             services.AddDbContext<AppDbContext>(options =>
-                options.UseInMemoryDatabase(databaseName));
+                options
+                    .UseInMemoryDatabase(databaseName)
+                    .ConfigureWarnings(warnings =>
+                        warnings.Ignore(InMemoryEventId.TransactionIgnoredWarning)));
 
             using var scope = services.BuildServiceProvider().CreateScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();

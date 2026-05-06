@@ -5,10 +5,12 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using Rendezvous.Api.Authentication;
+using Rendezvous.Api.Email;
 using Rendezvous.Api.Services;
 using Rendezvous.Api.Swagger;
 using Rendezvous.Infrastructure.Identity;
 using Rendezvous.Infrastructure.Persistence;
+using Resend;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -32,6 +34,30 @@ builder.Services
     .AddRoles<IdentityRole<Guid>>()
     .AddEntityFrameworkStores<AppDbContext>();
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection("Jwt"));
+builder.Services.Configure<EmailOptions>(builder.Configuration.GetSection("Email"));
+builder.Services.Configure<ResendClientOptions>(options =>
+{
+    options.ApiToken = builder.Configuration["Email:Resend:ApiKey"] ?? string.Empty;
+});
+builder.Services.AddHttpClient<ResendClient>();
+builder.Services.AddTransient<IResend, ResendClient>();
+if (builder.Environment.IsEnvironment("Testing"))
+{
+    builder.Services.AddSingleton<InMemoryEmailSender>();
+    builder.Services.AddSingleton<IEmailSender>(provider =>
+        provider.GetRequiredService<InMemoryEmailSender>());
+}
+else if (string.Equals(
+    builder.Configuration["Email:Provider"],
+    "Resend",
+    StringComparison.OrdinalIgnoreCase))
+{
+    builder.Services.AddScoped<IEmailSender, ResendEmailSender>();
+}
+else
+{
+    builder.Services.AddScoped<IEmailSender, DisabledEmailSender>();
+}
 builder.Services.AddScoped<AuthTokenService>();
 builder.Services.AddScoped<AppointmentExpirationService>();
 builder.Services.AddScoped<InvitationTokenService>();
@@ -39,6 +65,8 @@ builder.Services.AddScoped<PublicNumberGenerator>();
 builder.Services.AddScoped<AvailabilityExceptionService>();
 builder.Services.AddScoped<BusinessProvisioningService>();
 builder.Services.AddScoped<NotificationWriter>();
+builder.Services.AddScoped<EmailConfirmationService>();
+builder.Services.AddScoped<AppointmentEmailService>();
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
