@@ -3,6 +3,7 @@
 # Environment files
 .env
 .env.*
+!.env.example
 
 # Local notes / working docs
 login_info.md

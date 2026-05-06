@@ -112,3 +112,35 @@ tests/
 - Styling/UI: Tailwind CSS 4, shadcn/ui, lucide-react
 - Tests: xUnit, ASP.NET Core integration testing, EF Core InMemory for API test isolation
 - Package managers: NuGet for .NET, npm for frontend
+
+## Docker
+
+Copy the example environment file and adjust secrets before running the stack:
+
+```bash
+cp .env.example .env
+```
+
+Start the stack:
+
+```bash
+docker compose up -d --build
+```
+
+The default local ports are:
+
+```text
+Web: http://localhost:3000
+```
+
+Stop the stack with:
+
+```bash
+docker compose down
+```
+
+For a VPS deployment, use the same Docker Compose file. PostgreSQL and the API are only reachable inside the Docker network; the web app binds to `127.0.0.1:3000` by default. Put Nginx, Caddy, or another reverse proxy in front of it for the public domain and HTTPS.
+
+```bash
+docker compose up -d --build
+```
