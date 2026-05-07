@@ -114,7 +114,6 @@ function LoginPageContent() {
                   name="email"
                   type="email"
                   autoComplete="email"
-                  placeholder="owner1@gmail.com"
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
                   required
