@@ -20,6 +20,31 @@ public class BusinessConfiguration : IEntityTypeConfiguration<Business>
             .HasDefaultValue("Europe/Istanbul")
             .IsRequired();
 
+        builder.Property(business => business.AddressLine)
+            .HasMaxLength(240)
+            .HasDefaultValue(string.Empty)
+            .IsRequired();
+
+        builder.Property(business => business.District)
+            .HasMaxLength(120)
+            .HasDefaultValue(string.Empty)
+            .IsRequired();
+
+        builder.Property(business => business.City)
+            .HasMaxLength(120)
+            .HasDefaultValue(string.Empty)
+            .IsRequired();
+
+        builder.Property(business => business.Country)
+            .HasMaxLength(120)
+            .HasDefaultValue(string.Empty)
+            .IsRequired();
+
+        builder.Property(business => business.Description)
+            .HasMaxLength(1200)
+            .HasDefaultValue(string.Empty)
+            .IsRequired();
+
         builder.Property(business => business.Type)
             .IsRequired();
 

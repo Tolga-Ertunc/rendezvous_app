@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Rendezvous.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using Rendezvous.Infrastructure.Persistence;
 namespace Rendezvous.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260506153515_AddBusinessPhotoStorageMetadata")]
+    partial class AddBusinessPhotoStorageMetadata
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -726,36 +729,6 @@ namespace Rendezvous.Infrastructure.Persistence.Migrations
                     b.ToTable("BusinessServices");
                 });
 
-            modelBuilder.Entity("Rendezvous.Domain.Services.BusinessServiceCategory", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("BusinessId")
-                        .HasColumnType("uuid");
-
-                    b.Property<bool>("IsSystem")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(120)
-                        .HasColumnType("character varying(120)");
-
-                    b.Property<int>("SortOrder")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("BusinessId", "Name")
-                        .IsUnique();
-
-                    b.HasIndex("BusinessId", "SortOrder");
-
-                    b.ToTable("BusinessServiceCategories");
-                });
-
             modelBuilder.Entity("Rendezvous.Domain.Staff.StaffMember", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1155,15 +1128,6 @@ namespace Rendezvous.Infrastructure.Persistence.Migrations
                 });
 
             modelBuilder.Entity("Rendezvous.Domain.Services.BusinessService", b =>
-                {
-                    b.HasOne("Rendezvous.Domain.Businesses.Business", null)
-                        .WithMany()
-                        .HasForeignKey("BusinessId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Rendezvous.Domain.Services.BusinessServiceCategory", b =>
                 {
                     b.HasOne("Rendezvous.Domain.Businesses.Business", null)
                         .WithMany()

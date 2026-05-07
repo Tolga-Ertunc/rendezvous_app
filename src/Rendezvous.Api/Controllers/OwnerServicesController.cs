@@ -43,10 +43,18 @@ public class OwnerServicesController : ControllerBase
             return BadRequest(new { message = validationError });
         }
 
+        var categoryName = NormalizeCategoryName(request.CategoryName);
+        await EnsureFeaturedCategoryAsync(businessId, cancellationToken);
+        if (!await ServiceCategoryExistsAsync(businessId, categoryName, cancellationToken))
+        {
+            return BadRequest(new { message = "Select an existing service category." });
+        }
+
         var service = new BusinessService
         {
             BusinessId = businessId,
             Name = request.Name.Trim(),
+            CategoryName = categoryName,
             DurationMinutes = request.DurationMinutes,
             BasePriceAmount = request.BasePriceAmount,
             CurrencyCode = request.CurrencyCode.Trim().ToUpperInvariant(),
@@ -95,7 +103,15 @@ public class OwnerServicesController : ControllerBase
             return NotFound();
         }
 
+        var categoryName = NormalizeCategoryName(request.CategoryName);
+        await EnsureFeaturedCategoryAsync(businessId, cancellationToken);
+        if (!await ServiceCategoryExistsAsync(businessId, categoryName, cancellationToken))
+        {
+            return BadRequest(new { message = "Select an existing service category." });
+        }
+
         service.Name = request.Name.Trim();
+        service.CategoryName = categoryName;
         service.DurationMinutes = request.DurationMinutes;
         service.BasePriceAmount = request.BasePriceAmount;
         service.CurrencyCode = request.CurrencyCode.Trim().ToUpperInvariant();
@@ -173,6 +189,37 @@ public class OwnerServicesController : ControllerBase
                 cancellationToken);
     }
 
+    private async Task EnsureFeaturedCategoryAsync(Guid businessId, CancellationToken cancellationToken)
+    {
+        if (await dbContext.BusinessServiceCategories.AnyAsync(
+                category => category.BusinessId == businessId && category.Name == "Featured",
+                cancellationToken))
+        {
+            return;
+        }
+
+        dbContext.BusinessServiceCategories.Add(new BusinessServiceCategory
+        {
+            BusinessId = businessId,
+            Name = "Featured",
+            SortOrder = 0,
+            IsSystem = true
+        });
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    private Task<bool> ServiceCategoryExistsAsync(
+        Guid businessId,
+        string categoryName,
+        CancellationToken cancellationToken)
+    {
+        return dbContext.BusinessServiceCategories
+            .AsNoTracking()
+            .AnyAsync(
+                category => category.BusinessId == businessId && category.Name == categoryName,
+                cancellationToken);
+    }
+
     private static string? ValidateRequest(OwnerServiceRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.Name))
@@ -195,6 +242,11 @@ public class OwnerServicesController : ControllerBase
             return "Currency code must be 3 characters.";
         }
 
+        if (!string.IsNullOrWhiteSpace(request.CategoryName) && request.CategoryName.Trim().Length > 120)
+        {
+            return "Service category cannot exceed 120 characters.";
+        }
+
         return null;
     }
 
@@ -203,10 +255,18 @@ public class OwnerServicesController : ControllerBase
         return new OwnerServiceMutationResponse(
             service.Id,
             service.Name,
+            service.CategoryName,
             service.DurationMinutes,
             service.BasePriceAmount,
             service.CurrencyCode,
             service.IsActive);
+    }
+
+    private static string NormalizeCategoryName(string? categoryName)
+    {
+        return string.IsNullOrWhiteSpace(categoryName)
+            ? "Featured"
+            : categoryName.Trim();
     }
 
     private Guid? GetCurrentUserId()
@@ -221,6 +281,7 @@ public class OwnerServicesController : ControllerBase
 
 public sealed record OwnerServiceRequest(
     string Name,
+    string? CategoryName,
     int DurationMinutes,
     decimal BasePriceAmount,
     string CurrencyCode,
@@ -229,6 +290,7 @@ public sealed record OwnerServiceRequest(
 public sealed record OwnerServiceMutationResponse(
     Guid Id,
     string Name,
+    string CategoryName,
     int DurationMinutes,
     decimal BasePriceAmount,
     string CurrencyCode,

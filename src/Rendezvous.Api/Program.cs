@@ -35,6 +35,7 @@ builder.Services
     .AddEntityFrameworkStores<AppDbContext>();
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection("Jwt"));
 builder.Services.Configure<EmailOptions>(builder.Configuration.GetSection("Email"));
+builder.Services.Configure<BusinessPhotoStorageOptions>(builder.Configuration.GetSection("Media"));
 builder.Services.Configure<ResendClientOptions>(options =>
 {
     options.ApiToken = builder.Configuration["Email:Resend:ApiKey"] ?? string.Empty;
@@ -67,6 +68,7 @@ builder.Services.AddScoped<BusinessProvisioningService>();
 builder.Services.AddScoped<NotificationWriter>();
 builder.Services.AddScoped<EmailConfirmationService>();
 builder.Services.AddScoped<AppointmentEmailService>();
+builder.Services.AddScoped<BusinessPhotoStorageService>();
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>

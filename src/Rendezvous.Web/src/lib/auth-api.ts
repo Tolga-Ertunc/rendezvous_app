@@ -48,10 +48,18 @@ export type OwnerBusiness = {
 export type BusinessService = {
   id: string
   name: string
+  categoryName: string
   durationMinutes: number
   basePriceAmount: number
   currencyCode: string
   isActive: boolean
+}
+
+export type BusinessServiceCategory = {
+  id: string
+  name: string
+  sortOrder: number
+  isSystem: boolean
 }
 
 export type BusinessStaffMember = {
@@ -61,6 +69,19 @@ export type BusinessStaffMember = {
 }
 
 export type BusinessDetail = OwnerBusiness & {
+  addressLine: string
+  district: string
+  city: string
+  country: string
+  description: string
+  supportsInstantConfirmation: boolean
+  supportsPayByApp: boolean
+  isPetFriendly: boolean
+  isKidFriendly: boolean
+  isNearPublicTransport: boolean
+  usesOrganicProducts: boolean
+  usesVeganProducts: boolean
+  isEnvironmentallyFriendly: boolean
   owner?: {
     id: string
     publicNumber: number
@@ -69,8 +90,35 @@ export type BusinessDetail = OwnerBusiness & {
   serviceCount?: number
   staffCount?: number
   appointmentCount?: number
+  serviceCategories: BusinessServiceCategory[]
   services: BusinessService[]
   staffMembers: BusinessStaffMember[]
+  photos: BusinessPhoto[]
+  reviewSummary: BusinessReviewSummary
+  reviews: BusinessReview[]
+}
+
+export type BusinessPhoto = {
+  id: string
+  imageUrl: string
+  altText: string
+  sortOrder: number
+  contentType: string
+  fileSizeBytes: number
+}
+
+export type BusinessReviewSummary = {
+  averageRating: number
+  reviewCount: number
+}
+
+export type BusinessReview = {
+  id: string
+  customerName: string
+  customerInitial: string
+  rating: number
+  comment: string
+  createdAtUtc: string
 }
 
 export type OwnerAppointmentRequest = {
@@ -197,10 +245,33 @@ export type AvailabilityExceptionConflict = {
 
 export type OwnerServiceRequest = {
   name: string
+  categoryName: string
   durationMinutes: number
   basePriceAmount: number
   currencyCode: string
   isActive: boolean
+}
+
+export type OwnerServiceCategoryRequest = {
+  name: string
+}
+
+export type OwnerBusinessProfileRequest = {
+  name: string
+  timeZoneId: string
+  addressLine: string
+  district: string
+  city: string
+  country: string
+  description: string
+  supportsInstantConfirmation: boolean
+  supportsPayByApp: boolean
+  isPetFriendly: boolean
+  isKidFriendly: boolean
+  isNearPublicTransport: boolean
+  usesOrganicProducts: boolean
+  usesVeganProducts: boolean
+  isEnvironmentallyFriendly: boolean
 }
 
 export type OwnerStaffRequest = {
@@ -376,6 +447,16 @@ export function createOwnerBusiness(request: CreateOwnerBusinessRequest) {
   })
 }
 
+export function updateOwnerBusinessProfile(
+  businessId: string,
+  request: OwnerBusinessProfileRequest
+) {
+  return apiRequest<BusinessDetail>(`/owner/businesses/${businessId}/profile`, {
+    method: "PUT",
+    body: JSON.stringify(request),
+  })
+}
+
 export function getOwnerBusinessInvitations(businessId: string) {
   return apiRequest<OwnerBusinessInvitation[]>(
     `/owner/businesses/${businessId}/invitations`
@@ -446,6 +527,43 @@ export function createOwnerService(
   })
 }
 
+export function createOwnerServiceCategory(
+  businessId: string,
+  request: OwnerServiceCategoryRequest
+) {
+  return apiRequest<BusinessServiceCategory>(
+    `/owner/businesses/${businessId}/service-categories`,
+    {
+      method: "POST",
+      body: JSON.stringify(request),
+    }
+  )
+}
+
+export function updateOwnerServiceCategory(
+  businessId: string,
+  categoryId: string,
+  request: OwnerServiceCategoryRequest
+) {
+  return apiRequest<BusinessServiceCategory>(
+    `/owner/businesses/${businessId}/service-categories/${categoryId}`,
+    {
+      method: "PUT",
+      body: JSON.stringify(request),
+    }
+  )
+}
+
+export function deleteOwnerServiceCategory(
+  businessId: string,
+  categoryId: string
+) {
+  return apiRequest<void>(
+    `/owner/businesses/${businessId}/service-categories/${categoryId}`,
+    { method: "DELETE", ignoreNoContent: true }
+  )
+}
+
 export function updateOwnerService(
   businessId: string,
   serviceId: string,
@@ -471,6 +589,47 @@ export function deactivateOwnerService(businessId: string, serviceId: string) {
   return apiRequest<BusinessService>(
     `/owner/businesses/${businessId}/services/${serviceId}/deactivate`,
     { method: "POST" }
+  )
+}
+
+export function uploadOwnerBusinessPhoto(
+  businessId: string,
+  file: File,
+  altText: string
+) {
+  const formData = new FormData()
+  formData.append("file", file)
+  formData.append("altText", altText)
+
+  return apiRequest<BusinessPhoto>(`/owner/businesses/${businessId}/photos`, {
+    method: "POST",
+    body: formData,
+  })
+}
+
+export function deleteOwnerBusinessPhoto(
+  businessId: string,
+  photoId: string
+) {
+  return apiRequest<void>(
+    `/owner/businesses/${businessId}/photos/${photoId}`,
+    {
+      method: "DELETE",
+      ignoreNoContent: true,
+    }
+  )
+}
+
+export function reorderOwnerBusinessPhotos(
+  businessId: string,
+  photoIds: string[]
+) {
+  return apiRequest<BusinessPhoto[]>(
+    `/owner/businesses/${businessId}/photos/order`,
+    {
+      method: "PUT",
+      body: JSON.stringify({ photoIds }),
+    }
   )
 }
 

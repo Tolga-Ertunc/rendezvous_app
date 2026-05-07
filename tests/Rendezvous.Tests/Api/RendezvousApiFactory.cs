@@ -14,6 +14,10 @@ namespace Rendezvous.Tests.Api;
 public sealed class RendezvousApiFactory : WebApplicationFactory<Program>
 {
     private readonly string databaseName = $"RendezvousTests_{Guid.NewGuid():N}";
+    private readonly string mediaUploadRoot = Path.Combine(
+        Path.GetTempPath(),
+        "rendezvous-tests",
+        Guid.NewGuid().ToString("N"));
 
     public RendezvousApiFactory()
     {
@@ -38,7 +42,8 @@ public sealed class RendezvousApiFactory : WebApplicationFactory<Program>
                 ["ConnectionStrings:DefaultConnection"] = "Host=localhost;Database=rendezvous_tests",
                 ["Jwt:Issuer"] = "Rendezvous.Tests",
                 ["Jwt:Audience"] = "Rendezvous.Tests",
-                ["Jwt:SigningKey"] = "rendezvous-tests-signing-key-with-enough-length"
+                ["Jwt:SigningKey"] = "rendezvous-tests-signing-key-with-enough-length",
+                ["Media:UploadRoot"] = mediaUploadRoot
             });
         });
 
@@ -60,6 +65,16 @@ public sealed class RendezvousApiFactory : WebApplicationFactory<Program>
             EnsureRoleAsync(roleManager, ApplicationRoles.Admin).GetAwaiter().GetResult();
             EnsureRoleAsync(roleManager, ApplicationRoles.User).GetAwaiter().GetResult();
         });
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        base.Dispose(disposing);
+
+        if (Directory.Exists(mediaUploadRoot))
+        {
+            Directory.Delete(mediaUploadRoot, recursive: true);
+        }
     }
 
     private static async Task EnsureRoleAsync(

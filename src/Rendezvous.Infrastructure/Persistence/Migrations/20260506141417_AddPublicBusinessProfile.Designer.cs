@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Rendezvous.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using Rendezvous.Infrastructure.Persistence;
 namespace Rendezvous.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260506141417_AddPublicBusinessProfile")]
+    partial class AddPublicBusinessProfile
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -515,16 +518,6 @@ namespace Rendezvous.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("BusinessId")
                         .HasColumnType("uuid");
 
-                    b.Property<string>("ContentType")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(80)
-                        .HasColumnType("character varying(80)")
-                        .HasDefaultValue("");
-
-                    b.Property<long>("FileSizeBytes")
-                        .HasColumnType("bigint");
-
                     b.Property<string>("ImageUrl")
                         .IsRequired()
                         .HasMaxLength(600)
@@ -532,13 +525,6 @@ namespace Rendezvous.Infrastructure.Persistence.Migrations
 
                     b.Property<int>("SortOrder")
                         .HasColumnType("integer");
-
-                    b.Property<string>("StorageKey")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(600)
-                        .HasColumnType("character varying(600)")
-                        .HasDefaultValue("");
 
                     b.HasKey("Id");
 
@@ -724,36 +710,6 @@ namespace Rendezvous.Infrastructure.Persistence.Migrations
                     b.HasIndex("BusinessId", "IsActive");
 
                     b.ToTable("BusinessServices");
-                });
-
-            modelBuilder.Entity("Rendezvous.Domain.Services.BusinessServiceCategory", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("BusinessId")
-                        .HasColumnType("uuid");
-
-                    b.Property<bool>("IsSystem")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(120)
-                        .HasColumnType("character varying(120)");
-
-                    b.Property<int>("SortOrder")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("BusinessId", "Name")
-                        .IsUnique();
-
-                    b.HasIndex("BusinessId", "SortOrder");
-
-                    b.ToTable("BusinessServiceCategories");
                 });
 
             modelBuilder.Entity("Rendezvous.Domain.Staff.StaffMember", b =>
@@ -1155,15 +1111,6 @@ namespace Rendezvous.Infrastructure.Persistence.Migrations
                 });
 
             modelBuilder.Entity("Rendezvous.Domain.Services.BusinessService", b =>
-                {
-                    b.HasOne("Rendezvous.Domain.Businesses.Business", null)
-                        .WithMany()
-                        .HasForeignKey("BusinessId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Rendezvous.Domain.Services.BusinessServiceCategory", b =>
                 {
                     b.HasOne("Rendezvous.Domain.Businesses.Business", null)
                         .WithMany()

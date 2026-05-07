@@ -1,5 +1,6 @@
 using Rendezvous.Domain.Availability;
 using Rendezvous.Domain.Businesses;
+using Rendezvous.Domain.Services;
 using Rendezvous.Domain.Staff;
 using Rendezvous.Infrastructure.Persistence;
 
@@ -52,6 +53,13 @@ public class BusinessProvisioningService
         dbContext.Businesses.Add(business);
         dbContext.BusinessMemberships.Add(membership);
         dbContext.StaffMembers.Add(staffMember);
+        dbContext.BusinessServiceCategories.Add(new BusinessServiceCategory
+        {
+            BusinessId = business.Id,
+            Name = "Featured",
+            SortOrder = 0,
+            IsSystem = true
+        });
         AddDefaultBusinessWorkingHours(business.Id);
         AddDefaultStaffWorkingHours(staffMember.Id);
 

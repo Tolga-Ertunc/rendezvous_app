@@ -7,8 +7,10 @@ import { useParams, useRouter } from "next/navigation"
 import {
   CalendarDays,
   Clock,
+  Images,
   ListChecks,
   Settings,
+  Store,
   UsersRound,
 } from "lucide-react"
 
@@ -18,6 +20,7 @@ import { OwnerAppointmentRequestsPanel } from "@/components/dashboard/owner-appo
 import {
   OwnerAppointmentsPanel,
   OwnerBusinessHoursPanel,
+  OwnerBusinessProfilePanel,
   OwnerServicesPanel,
   OwnerStaffHoursPanel,
   OwnerStaffPanel,
@@ -39,6 +42,7 @@ import { cn } from "@/lib/utils"
 
 type OwnerBusinessSection =
   | "overview"
+  | "profile"
   | "services"
   | "staff"
   | "hours"
@@ -47,7 +51,8 @@ type OwnerBusinessSection =
 
 const sectionCopy = {
   overview: ["Overview", "Business summary and management links."],
-  services: ["Services", "Manage service names, durations, and prices."],
+  profile: ["Business profile", "Manage the public business page content."],
+  services: ["Services", "Manage service names, categories, durations, and prices."],
   staff: ["Staff", "Manage staff display names and active state."],
   hours: ["Working hours", "Manage business and staff working hours."],
   exceptions: ["Scheduling exceptions", "Manage closures, holidays, and leave."],
@@ -128,6 +133,11 @@ export function OwnerBusinessSectionPage({
         <OwnerBusinessNav businessId={business.id} active={section} />
         {section === "overview" ? (
           <OwnerOverview business={business} />
+        ) : section === "profile" ? (
+          <OwnerBusinessProfilePanel
+            business={business}
+            onChanged={refreshBusiness}
+          />
         ) : section === "services" ? (
           <OwnerServicesPanel business={business} onChanged={refreshBusiness} />
         ) : section === "staff" ? (
@@ -190,6 +200,12 @@ function OwnerOverview({ business }: { business: BusinessDetail }) {
       </Card>
       <div className="grid gap-3 md:grid-cols-3">
         <OverviewAction
+          href={`/owner/businesses/${business.id}/profile`}
+          title="Profile"
+          description="Edit public page content."
+          icon={Store}
+        />
+        <OverviewAction
           href={`/owner/businesses/${business.id}/services`}
           title="Services"
           description="Edit service catalog."
@@ -250,32 +266,37 @@ function OwnerBusinessNav({
 }) {
   const links = [
     ["overview", "Overview", Settings],
+    ["profile", "Profile", Store],
     ["services", "Services", ListChecks],
     ["staff", "Staff", UsersRound],
     ["hours", "Hours", Clock],
     ["exceptions", "Exceptions", CalendarDays],
-    ["appointments", "Appointments", CalendarDays],
+    ["appointments", "Appointments", Images],
   ] as const
 
   return (
-    <Card>
-      <CardContent className="flex flex-wrap gap-2 p-3">
+    <div className="border-b border-[#e5e7eb]">
+      <div className="flex flex-wrap gap-7 overflow-x-auto">
         {links.map(([key, label, Icon]) => (
           <Link
             key={key}
             href={`/owner/businesses/${businessId}/${key}`}
             className={cn(
-              buttonVariants({
-                variant: active === key ? "default" : "outline",
-                size: "sm",
-              })
+              "relative flex h-14 shrink-0 items-center gap-2 text-base font-semibold text-[#71717a]",
+              active === key && "text-[#111111]"
             )}
           >
-            <Icon data-icon="inline-start" className="size-4" />
+            <Icon className="size-4" aria-hidden="true" />
             {label}
+            <span
+              className={cn(
+                "absolute bottom-0 left-0 h-[3px] w-full bg-transparent",
+                active === key && "bg-[#111111]"
+              )}
+            />
           </Link>
         ))}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   )
 }

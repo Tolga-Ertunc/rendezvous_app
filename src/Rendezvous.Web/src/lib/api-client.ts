@@ -35,7 +35,7 @@ async function sendRequest<T>(
 ): Promise<T> {
   const response = await fetch(`${apiBasePath}${path}`, {
     ...options,
-    headers: createHeaders(options.headers),
+    headers: createHeaders(options.headers, options.body),
   })
 
   if (
@@ -71,10 +71,13 @@ async function readErrorBody(response: Response) {
   }
 }
 
-function createHeaders(headers: HeadersInit | undefined) {
+function createHeaders(headers: HeadersInit | undefined, body?: BodyInit | null) {
   const nextHeaders = new Headers(headers)
 
-  if (!nextHeaders.has("content-type")) {
+  const isFormData =
+    typeof FormData !== "undefined" && body instanceof FormData
+
+  if (!isFormData && !nextHeaders.has("content-type")) {
     nextHeaders.set("content-type", "application/json")
   }
 

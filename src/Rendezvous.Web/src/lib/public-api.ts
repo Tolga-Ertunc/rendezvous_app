@@ -16,11 +16,59 @@ export type PublicBusinessSummaryService = {
 }
 
 export type PublicBusinessService = PublicBusinessSummaryService & {
+  categoryName: string
   basePriceAmount: number
 }
 
 export type PublicBusinessDetail = Omit<PublicBusiness, "services"> & {
+  address: PublicBusinessAddress
+  description: string
   services: PublicBusinessService[]
+  workingHours: PublicBusinessWorkingHour[]
+  staffMembers: PublicBusinessStaffMember[]
+  photos: PublicBusinessPhoto[]
+  reviewSummary: PublicBusinessReviewSummary
+  reviews: PublicBusinessReview[]
+  additionalInformation: string[]
+}
+
+export type PublicBusinessAddress = {
+  addressLine: string
+  district: string
+  city: string
+  country: string
+}
+
+export type PublicBusinessWorkingHour = {
+  dayOfWeek: string
+  opensAt: string
+  closesAt: string
+}
+
+export type PublicBusinessStaffMember = {
+  id: string
+  displayName: string
+}
+
+export type PublicBusinessPhoto = {
+  id: string
+  imageUrl: string
+  altText: string
+  sortOrder: number
+}
+
+export type PublicBusinessReviewSummary = {
+  averageRating: number
+  reviewCount: number
+}
+
+export type PublicBusinessReview = {
+  id: string
+  customerName: string
+  customerInitial: string
+  rating: number
+  comment: string
+  createdAtUtc: string
 }
 
 export function getPublicBusinesses(params?: { search?: string; type?: string }) {

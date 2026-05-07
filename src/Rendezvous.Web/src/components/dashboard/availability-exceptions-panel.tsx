@@ -189,7 +189,12 @@ function AvailabilityExceptionsPanel({
     setMessage("")
     setError("")
 
-    const request = toRequest(draft, cancelConflictingAppointments, initialBusinessId)
+    const request = toRequest(
+      draft,
+      cancelConflictingAppointments,
+      initialBusinessId,
+      mode === "employee"
+    )
     if (!request.date) {
       setError("Date is required.")
       return
@@ -237,7 +242,12 @@ function AvailabilityExceptionsPanel({
           conflict,
         })
       } else {
-        setError("Scheduling exception could not be saved.")
+        setError(
+          getApiErrorMessage(
+            caughtError,
+            "Scheduling exception could not be saved."
+          )
+        )
       }
     } finally {
       setActingId("")
@@ -279,8 +289,13 @@ function AvailabilityExceptionsPanel({
       resetDraft()
       setMessage("Exception saved and affected active reservations cancelled.")
       await refreshExceptions()
-    } catch {
-      setError("Scheduling exception could not be saved.")
+    } catch (caughtError) {
+      setError(
+        getApiErrorMessage(
+          caughtError,
+          "Scheduling exception could not be saved."
+        )
+      )
     } finally {
       setActingId("")
     }
@@ -303,8 +318,13 @@ function AvailabilityExceptionsPanel({
         resetDraft()
       }
       await refreshExceptions()
-    } catch {
-      setError("Scheduling exception could not be deleted.")
+    } catch (caughtError) {
+      setError(
+        getApiErrorMessage(
+          caughtError,
+          "Scheduling exception could not be deleted."
+        )
+      )
     } finally {
       setActingId("")
     }
@@ -620,10 +640,13 @@ function ExceptionRow({
 function toRequest(
   draft: ExceptionDraft,
   cancelConflictingAppointments: boolean,
-  fallbackBusinessId: string
+  fallbackBusinessId: string,
+  includeBusinessId: boolean
 ): AvailabilityExceptionRequest {
   return {
-    businessId: draft.businessId || fallbackBusinessId || undefined,
+    businessId: includeBusinessId
+      ? draft.businessId || fallbackBusinessId || undefined
+      : undefined,
     staffMemberId:
       draft.type === "StaffLeave" && draft.staffMemberId
         ? draft.staffMemberId
@@ -636,6 +659,25 @@ function toRequest(
     note: draft.note.trim() || null,
     cancelConflictingAppointments,
   }
+}
+
+function getApiErrorMessage(error: unknown, fallback: string) {
+  if (!(error instanceof ApiError)) {
+    return fallback
+  }
+
+  if (
+    typeof error.body === "object" &&
+    error.body !== null &&
+    "message" in error.body
+  ) {
+    const message = (error.body as { message?: unknown }).message
+    if (typeof message === "string" && message.trim()) {
+      return message
+    }
+  }
+
+  return fallback
 }
 
 function getConflictBody(error: unknown) {

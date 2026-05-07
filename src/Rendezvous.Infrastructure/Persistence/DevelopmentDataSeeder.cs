@@ -20,6 +20,10 @@ public static class DevelopmentDataSeeder
     private static readonly Guid BusinessEmployeeMembershipId = Guid.Parse("c5afbd6c-8ed2-43f6-b92a-17d27a5c3545");
     private static readonly Guid OwnerStaffMemberId = Guid.Parse("c7f422d0-345f-4196-9d4f-acddfcce8307");
     private static readonly Guid EmployeeStaffMemberId = Guid.Parse("db4ea86f-d902-4df8-ac38-ff7cb8e5fdc4");
+    private static readonly Guid ReviewReyesId = Guid.Parse("32f8a45f-5fb4-4d70-8cef-6fc1d7cb9390");
+    private static readonly Guid ReviewDonnaId = Guid.Parse("86b26c13-7b22-4d82-aaf8-9785333f4d27");
+    private static readonly Guid ReviewLaminId = Guid.Parse("44e45e8b-0436-4e12-975f-a6d22eab27fd");
+    private static readonly Guid ReviewJonathanId = Guid.Parse("c5c5fba3-f3e5-4ff0-89bb-f14c32788d61");
     private static readonly Guid AdminRoleId = Guid.Parse("461a8ed4-92ce-4507-a85e-29bc5d690e47");
     private static readonly Guid UserRoleId = Guid.Parse("6846f7d9-b22a-4a2b-a45a-7147a7b98558");
     private static readonly (Guid Id, DayOfWeek DayOfWeek)[] BusinessWorkingHourSeed =
@@ -104,18 +108,24 @@ public static class DevelopmentDataSeeder
             if (business.OwnerUserId != ownerUserId.Value)
             {
                 business.OwnerUserId = ownerUserId.Value;
-                await dbContext.SaveChangesAsync(cancellationToken);
             }
+
+            ApplyDemoBusinessProfile(business);
+
+            await dbContext.SaveChangesAsync(cancellationToken);
 
             await SeedBusinessOwnerMembershipAsync(dbContext, ownerUserId.Value, cancellationToken);
             await SeedOwnerStaffMemberAsync(dbContext, ownerUserId.Value, cancellationToken);
             await SeedBusinessEmployeeAsync(dbContext, employeeUserId, cancellationToken);
+            await SeedBusinessServiceCategoriesAsync(dbContext, cancellationToken);
+            await SeedBusinessServicesAsync(dbContext, cancellationToken);
             await SeedBusinessWorkingHoursAsync(dbContext, cancellationToken);
             await SeedStaffWorkingHoursAsync(dbContext, cancellationToken);
+            await SeedBusinessReviewsAsync(dbContext, cancellationToken);
             return;
         }
 
-        dbContext.Businesses.Add(new Business
+        var demoBusiness = new Business
         {
             Id = BusinessId,
             OwnerUserId = ownerUserId.Value,
@@ -123,7 +133,9 @@ public static class DevelopmentDataSeeder
             Type = BusinessType.Barber,
             Status = BusinessStatus.Approved,
             TimeZoneId = "Europe/Istanbul"
-        });
+        };
+        ApplyDemoBusinessProfile(demoBusiness);
+        dbContext.Businesses.Add(demoBusiness);
 
         dbContext.BusinessServices.AddRange(
             new BusinessService
@@ -131,6 +143,7 @@ public static class DevelopmentDataSeeder
                 Id = Guid.Parse("a69eb469-64db-4eb3-9879-cacef2b8ccff"),
                 BusinessId = BusinessId,
                 Name = "Haircut",
+                CategoryName = "Hair Cut",
                 DurationMinutes = 30,
                 BasePriceAmount = 500,
                 CurrencyCode = "TRY",
@@ -141,6 +154,7 @@ public static class DevelopmentDataSeeder
                 Id = Guid.Parse("11384d77-62d8-44d3-9e2e-3c45d72e2786"),
                 BusinessId = BusinessId,
                 Name = "Beard Trim",
+                CategoryName = "Beard Trim",
                 DurationMinutes = 20,
                 BasePriceAmount = 300,
                 CurrencyCode = "TRY",
@@ -151,8 +165,20 @@ public static class DevelopmentDataSeeder
                 Id = Guid.Parse("572dfda3-13a2-4078-bba7-5f6407b78187"),
                 BusinessId = BusinessId,
                 Name = "Haircut and Beard",
+                CategoryName = "Featured",
                 DurationMinutes = 45,
                 BasePriceAmount = 750,
+                CurrencyCode = "TRY",
+                IsActive = true
+            },
+            new BusinessService
+            {
+                Id = Guid.Parse("7a3b6bde-448f-4d0c-ae83-140ff967e3fa"),
+                BusinessId = BusinessId,
+                Name = "Hair Dye",
+                CategoryName = "Hair Dye",
+                DurationMinutes = 60,
+                BasePriceAmount = 900,
                 CurrencyCode = "TRY",
                 IsActive = true
             });
@@ -161,8 +187,177 @@ public static class DevelopmentDataSeeder
         await SeedBusinessOwnerMembershipAsync(dbContext, ownerUserId.Value, cancellationToken);
         await SeedOwnerStaffMemberAsync(dbContext, ownerUserId.Value, cancellationToken);
         await SeedBusinessEmployeeAsync(dbContext, employeeUserId, cancellationToken);
+        await SeedBusinessServiceCategoriesAsync(dbContext, cancellationToken);
         await SeedBusinessWorkingHoursAsync(dbContext, cancellationToken);
         await SeedStaffWorkingHoursAsync(dbContext, cancellationToken);
+        await SeedBusinessReviewsAsync(dbContext, cancellationToken);
+    }
+
+    private static void ApplyDemoBusinessProfile(Business business)
+    {
+        business.AddressLine = "Bagdat Caddesi 120";
+        business.District = "Maltepe";
+        business.City = "Istanbul";
+        business.Country = "Turkey";
+        business.Description = "Clean, appointment-led barber services with focused cuts, beard care and color work.";
+        business.SupportsInstantConfirmation = true;
+        business.SupportsPayByApp = true;
+        business.IsPetFriendly = false;
+        business.IsKidFriendly = true;
+        business.IsNearPublicTransport = true;
+        business.UsesOrganicProducts = true;
+        business.UsesVeganProducts = false;
+        business.IsEnvironmentallyFriendly = true;
+    }
+
+    private static async Task SeedBusinessServicesAsync(
+        AppDbContext dbContext,
+        CancellationToken cancellationToken)
+    {
+        var services = await dbContext.BusinessServices
+            .Where(service => service.BusinessId == BusinessId)
+            .ToListAsync(cancellationToken);
+
+        if (!services.Any(service => service.Name == "Hair Dye"))
+        {
+            var hairDyeService = new BusinessService
+            {
+                Id = Guid.Parse("7a3b6bde-448f-4d0c-ae83-140ff967e3fa"),
+                BusinessId = BusinessId,
+                Name = "Hair Dye",
+                CategoryName = "Hair Dye",
+                DurationMinutes = 60,
+                BasePriceAmount = 900,
+                CurrencyCode = "TRY",
+                IsActive = true
+            };
+
+            dbContext.BusinessServices.Add(hairDyeService);
+            services.Add(hairDyeService);
+        }
+
+        foreach (var service in services)
+        {
+            service.CategoryName = service.Name switch
+            {
+                "Haircut" => "Hair Cut",
+                "Beard Trim" => "Beard Trim",
+                "Haircut and Beard" => "Featured",
+                "Hair Dye" => "Hair Dye",
+                _ => "Featured"
+            };
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    private static async Task SeedBusinessServiceCategoriesAsync(
+        AppDbContext dbContext,
+        CancellationToken cancellationToken)
+    {
+        var existingCategoryNames = await dbContext.BusinessServiceCategories
+            .Where(category => category.BusinessId == BusinessId)
+            .Select(category => category.Name)
+            .ToListAsync(cancellationToken);
+
+        var categoryNames = new[] { "Featured", "Hair Cut", "Beard Trim", "Hair Dye" };
+        for (var index = 0; index < categoryNames.Length; index++)
+        {
+            var name = categoryNames[index];
+            if (existingCategoryNames.Contains(name))
+            {
+                continue;
+            }
+
+            dbContext.BusinessServiceCategories.Add(new BusinessServiceCategory
+            {
+                BusinessId = BusinessId,
+                Name = name,
+                SortOrder = index,
+                IsSystem = name == "Featured"
+            });
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    private static async Task SeedBusinessReviewsAsync(
+        AppDbContext dbContext,
+        CancellationToken cancellationToken)
+    {
+        if (!await dbContext.Businesses.AnyAsync(business => business.Id == BusinessId, cancellationToken))
+        {
+            return;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var reviewSeeds = new[]
+        {
+            new BusinessReview
+            {
+                Id = ReviewReyesId,
+                BusinessId = BusinessId,
+                CustomerName = "Reyes B",
+                CustomerInitial = "R",
+                Rating = 5.0m,
+                Comment = "Nice cut, sociable service. Easy to get along with and the finish was clean.",
+                CreatedAtUtc = now.AddHours(-3),
+                IsPublic = true
+            },
+            new BusinessReview
+            {
+                Id = ReviewDonnaId,
+                BusinessId = BusinessId,
+                CustomerName = "Donna P",
+                CustomerInitial = "D",
+                Rating = 5.0m,
+                Comment = "Sharp work and a calm appointment. The team kept the timing tight.",
+                CreatedAtUtc = now.AddDays(-1).AddHours(-2),
+                IsPublic = true
+            },
+            new BusinessReview
+            {
+                Id = ReviewLaminId,
+                BusinessId = BusinessId,
+                CustomerName = "Lamin M",
+                CustomerInitial = "L",
+                Rating = 4.8m,
+                Comment = "Great as always. The haircut and beard line-up were exactly what I asked for.",
+                CreatedAtUtc = now.AddDays(-1).AddHours(-5),
+                IsPublic = true
+            },
+            new BusinessReview
+            {
+                Id = ReviewJonathanId,
+                BusinessId = BusinessId,
+                CustomerName = "Jonathan S",
+                CustomerInitial = "J",
+                Rating = 4.9m,
+                Comment = "This was a major change for me and the result landed well. The barber understood the style, kept checking length, and the final shape was spot on.",
+                CreatedAtUtc = now.AddDays(-2),
+                IsPublic = true
+            }
+        };
+
+        foreach (var seed in reviewSeeds)
+        {
+            var review = await dbContext.BusinessReviews
+                .SingleOrDefaultAsync(candidate => candidate.Id == seed.Id, cancellationToken);
+
+            if (review is null)
+            {
+                dbContext.BusinessReviews.Add(seed);
+                continue;
+            }
+
+            review.CustomerName = seed.CustomerName;
+            review.CustomerInitial = seed.CustomerInitial;
+            review.Rating = seed.Rating;
+            review.Comment = seed.Comment;
+            review.IsPublic = seed.IsPublic;
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
     }
 
     private static async Task SeedBusinessEmployeeAsync(
