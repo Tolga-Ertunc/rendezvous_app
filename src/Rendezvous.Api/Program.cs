@@ -69,6 +69,7 @@ builder.Services.AddScoped<NotificationWriter>();
 builder.Services.AddScoped<EmailConfirmationService>();
 builder.Services.AddScoped<AppointmentEmailService>();
 builder.Services.AddScoped<BusinessPhotoStorageService>();
+builder.Services.AddScoped<ApplicationRoleSeeder>();
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -111,6 +112,12 @@ builder.Services.AddSwaggerGen(options =>
 });
 
 var app = builder.Build();
+
+using (var scope = app.Services.CreateScope())
+{
+    var roleSeeder = scope.ServiceProvider.GetRequiredService<ApplicationRoleSeeder>();
+    await roleSeeder.SeedAsync();
+}
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())

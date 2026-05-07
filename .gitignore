@@ -3,6 +3,7 @@
 # Environment files
 .env
 .env.*
+!.env.example
 
 # Local notes / working docs
 login_info.md
@@ -16,11 +17,17 @@ scratch.md
 bin/
 obj/
 .nuget/
+src/Rendezvous.Api/App_Data/
 
 # Frontend
 node_modules/
 .next/
 out/
+
+# Docker-local generated state
+docker/postgres/init/*.sql
+docker/media/uploads/*
+!docker/media/uploads/.gitignore
 
 # Local AI/editor tooling
 AGENTS.md
