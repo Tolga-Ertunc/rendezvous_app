@@ -108,10 +108,10 @@ export default function AcceptInvitationPage() {
 
         <div className="flex justify-center gap-2">
           <Link
-            href="/dashboard"
+            href="/profile"
             className={cn(buttonVariants({ variant: "link" }))}
           >
-            Dashboard
+            Profile
           </Link>
           <Link href="/login" className={cn(buttonVariants({ variant: "link" }))}>
             Sign in

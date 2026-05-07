@@ -47,7 +47,7 @@ function LoginPageContent() {
 
     try {
       await login(email, password)
-      router.push("/dashboard")
+      router.push("/profile")
     } catch (error) {
       clearAuthTokens()
 

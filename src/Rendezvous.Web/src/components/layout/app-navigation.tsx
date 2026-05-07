@@ -8,7 +8,6 @@ import {
   BriefcaseBusiness,
   Building2,
   CalendarDays,
-  LayoutDashboard,
   ShieldCheck,
   UserRound,
   UsersRound,
@@ -36,14 +35,12 @@ import { cn } from "@/lib/utils"
 type AppNavigationProps = {
   showDiscoverLink?: boolean
   showGuestLinks?: boolean
-  showDashboardLink?: boolean
   logoutRedirectTo?: string
 }
 
 export function AppNavigation({
   showDiscoverLink = true,
   showGuestLinks = true,
-  showDashboardLink = true,
   logoutRedirectTo,
 }: AppNavigationProps) {
   const pathname = usePathname()
@@ -161,14 +158,6 @@ export function AppNavigation({
                 icon={CalendarDays}
                 active={pathname === "/appointments"}
               />
-              {showDashboardLink ? (
-                <NavigationLink
-                  href="/dashboard"
-                  label="Dashboard"
-                  icon={LayoutDashboard}
-                  active={pathname === "/dashboard"}
-                />
-              ) : null}
               {isEmployee ? (
                 <NavigationMenuItem>
                   <NavigationMenuTrigger
