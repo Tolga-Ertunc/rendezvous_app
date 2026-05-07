@@ -42,7 +42,7 @@ export function ProtectedPage({
 
   useEffect(() => {
     if (!getAccessToken()) {
-      router.replace("/")
+      router.replace("/login")
       return
     }
 

@@ -5,7 +5,12 @@ export type PublicBusiness = {
   name: string
   type: string
   timeZoneId: string
+  address: PublicBusinessAddress
   services: PublicBusinessSummaryService[]
+  workingHours: PublicBusinessWorkingHour[]
+  photos: PublicBusinessPhoto[]
+  reviewSummary: PublicBusinessReviewSummary
+  additionalInformation: string[]
 }
 
 export type PublicBusinessSummaryService = {

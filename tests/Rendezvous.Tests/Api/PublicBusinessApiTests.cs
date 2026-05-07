@@ -30,10 +30,23 @@ public class PublicBusinessApiTests : IClassFixture<RendezvousApiFactory>
             "/api/public/businesses?search=Public");
 
         businesses.Should().ContainSingle(business => business.Name == "Public Approved Barber");
-        businesses!.Single().Services.Should().ContainSingle(service =>
+        var business = businesses!.Single();
+
+        business.Address.City.Should().Be("Istanbul");
+        business.Services.Should().ContainSingle(service =>
             service.Name == "Haircut"
             && service.DurationMinutes == 30
             && service.CurrencyCode == "TRY");
+        business.WorkingHours.Should().ContainSingle(hour =>
+            hour.DayOfWeek == "Wednesday"
+            && hour.OpensAt == "09:00"
+            && hour.ClosesAt == "18:00");
+        business.Photos.Should().ContainSingle(photo =>
+            photo.ImageUrl == "/backend-api/public/business-photos/public-approved/content"
+            && photo.AltText == "Public Approved Barber interior");
+        business.ReviewSummary.ReviewCount.Should().Be(2);
+        business.ReviewSummary.AverageRating.Should().Be(4.5m);
+        business.AdditionalInformation.Should().Contain("Instant Confirmation");
         responseBody.Should().NotContain("basePriceAmount");
     }
 
@@ -134,6 +147,13 @@ public class PublicBusinessApiTests : IClassFixture<RendezvousApiFactory>
             OpensAt = new TimeOnly(9, 0),
             ClosesAt = new TimeOnly(18, 0)
         });
+        dbContext.BusinessPhotos.Add(new BusinessPhoto
+        {
+            BusinessId = approvedBusiness.Id,
+            ImageUrl = "/backend-api/public/business-photos/public-approved/content",
+            AltText = "Public Approved Barber interior",
+            SortOrder = 0
+        });
         dbContext.StaffMembers.Add(new StaffMember
         {
             BusinessId = approvedBusiness.Id,
@@ -172,7 +192,12 @@ public class PublicBusinessApiTests : IClassFixture<RendezvousApiFactory>
         string Name,
         string Type,
         string TimeZoneId,
-        IReadOnlyList<PublicBusinessServiceResponse> Services);
+        PublicBusinessAddressResponse Address,
+        IReadOnlyList<PublicBusinessServiceResponse> Services,
+        IReadOnlyList<PublicBusinessWorkingHourResponse> WorkingHours,
+        IReadOnlyList<PublicBusinessPhotoResponse> Photos,
+        PublicBusinessReviewSummaryResponse ReviewSummary,
+        IReadOnlyList<string> AdditionalInformation);
 
     private sealed record PublicBusinessServiceResponse(
         Guid Id,

@@ -153,15 +153,19 @@ export function PublicBookingFlow({
       business.services.find((service) => service.id === initialServiceId) ??
       null
 
-    setStep("services")
-    setSelectedServiceId(initialService?.id ?? "")
-    setActiveCategory(initialService?.categoryName ?? "Featured")
-    setSelectedDate(formatDateKey(getBusinessToday(business.timeZoneId)))
-    setSelectedSlotKey("")
-    setSelectedStaffId("")
-    setAvailabilityByDate({})
-    setError("")
-    setAppointmentRequest(null)
+    const resetTimeout = window.setTimeout(() => {
+      setStep("services")
+      setSelectedServiceId(initialService?.id ?? "")
+      setActiveCategory(initialService?.categoryName ?? "Featured")
+      setSelectedDate(formatDateKey(getBusinessToday(business.timeZoneId)))
+      setSelectedSlotKey("")
+      setSelectedStaffId("")
+      setAvailabilityByDate({})
+      setError("")
+      setAppointmentRequest(null)
+    }, 0)
+
+    return () => window.clearTimeout(resetTimeout)
   }, [business.services, business.timeZoneId, initialServiceId, onOpenChange, open, router])
 
   useEffect(() => {
@@ -170,9 +174,12 @@ export function PublicBookingFlow({
     }
 
     if (isBusinessClosedOnDate(business, selectedDateOption)) {
-      setSelectedSlotKey("")
-      setSelectedStaffId("")
-      return
+      const resetTimeout = window.setTimeout(() => {
+        setSelectedSlotKey("")
+        setSelectedStaffId("")
+      }, 0)
+
+      return () => window.clearTimeout(resetTimeout)
     }
 
     let isMounted = true

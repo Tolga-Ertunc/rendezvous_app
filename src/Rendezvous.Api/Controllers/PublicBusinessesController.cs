@@ -44,7 +44,19 @@ public class PublicBusinessesController : ControllerBase
                 business.Id,
                 business.Name,
                 business.Type,
-                business.TimeZoneId
+                business.TimeZoneId,
+                business.AddressLine,
+                business.District,
+                business.City,
+                business.Country,
+                business.SupportsInstantConfirmation,
+                business.SupportsPayByApp,
+                business.IsPetFriendly,
+                business.IsKidFriendly,
+                business.IsNearPublicTransport,
+                business.UsesOrganicProducts,
+                business.UsesVeganProducts,
+                business.IsEnvironmentallyFriendly
             })
             .ToListAsync(cancellationToken);
 
@@ -75,13 +87,99 @@ public class PublicBusinessesController : ControllerBase
                         service.CurrencyCode))
                     .ToList());
 
+        var workingHourRows = await dbContext.BusinessWorkingHours
+            .AsNoTracking()
+            .Where(workingHour => businessIds.Contains(workingHour.BusinessId))
+            .OrderBy(workingHour => workingHour.DayOfWeek)
+            .Select(workingHour => new
+            {
+                workingHour.BusinessId,
+                workingHour.DayOfWeek,
+                workingHour.OpensAt,
+                workingHour.ClosesAt
+            })
+            .ToListAsync(cancellationToken);
+
+        var workingHoursByBusinessId = workingHourRows
+            .GroupBy(workingHour => workingHour.BusinessId)
+            .ToDictionary(
+                group => group.Key,
+                group => (IReadOnlyList<PublicBusinessWorkingHourResponse>)group
+                    .Select(workingHour => new PublicBusinessWorkingHourResponse(
+                        workingHour.DayOfWeek.ToString(),
+                        workingHour.OpensAt.ToString("HH:mm"),
+                        workingHour.ClosesAt.ToString("HH:mm")))
+                    .ToList());
+
+        var photoRows = await dbContext.BusinessPhotos
+            .AsNoTracking()
+            .Where(photo => businessIds.Contains(photo.BusinessId))
+            .OrderBy(photo => photo.SortOrder)
+            .Select(photo => new
+            {
+                photo.BusinessId,
+                photo.Id,
+                photo.ImageUrl,
+                photo.AltText,
+                photo.SortOrder
+            })
+            .ToListAsync(cancellationToken);
+
+        var photosByBusinessId = photoRows
+            .GroupBy(photo => photo.BusinessId)
+            .ToDictionary(
+                group => group.Key,
+                group => (IReadOnlyList<PublicBusinessPhotoResponse>)group
+                    .Select(photo => new PublicBusinessPhotoResponse(
+                        photo.Id,
+                        photo.ImageUrl,
+                        photo.AltText,
+                        photo.SortOrder))
+                    .ToList());
+
+        var reviewRows = await dbContext.BusinessReviews
+            .AsNoTracking()
+            .Where(review => businessIds.Contains(review.BusinessId) && review.IsPublic)
+            .Select(review => new
+            {
+                review.BusinessId,
+                review.Rating
+            })
+            .ToListAsync(cancellationToken);
+
+        var reviewSummariesByBusinessId = reviewRows
+            .GroupBy(review => review.BusinessId)
+            .ToDictionary(
+                group => group.Key,
+                group => new PublicBusinessReviewSummaryResponse(
+                    Math.Round(group.Average(review => review.Rating), 1),
+                    group.Count()));
+
         return businesses
             .Select(business => new PublicBusinessSummaryResponse(
                 business.Id,
                 business.Name,
                 business.Type.ToString(),
                 business.TimeZoneId,
-                servicesByBusinessId.GetValueOrDefault(business.Id, [])))
+                new PublicBusinessAddressResponse(
+                    business.AddressLine,
+                    business.District,
+                    business.City,
+                    business.Country),
+                servicesByBusinessId.GetValueOrDefault(business.Id, []),
+                workingHoursByBusinessId.GetValueOrDefault(business.Id, []),
+                photosByBusinessId.GetValueOrDefault(business.Id, []),
+                reviewSummariesByBusinessId.GetValueOrDefault(
+                    business.Id,
+                    new PublicBusinessReviewSummaryResponse(0, 0)),
+                CreateAdditionalInformation(business.SupportsInstantConfirmation,
+                    business.SupportsPayByApp,
+                    business.IsPetFriendly,
+                    business.IsKidFriendly,
+                    business.IsNearPublicTransport,
+                    business.UsesOrganicProducts,
+                    business.UsesVeganProducts,
+                    business.IsEnvironmentallyFriendly)))
             .ToList();
     }
 
@@ -269,7 +367,12 @@ public sealed record PublicBusinessSummaryResponse(
     string Name,
     string Type,
     string TimeZoneId,
-    IReadOnlyList<PublicBusinessSummaryServiceResponse> Services);
+    PublicBusinessAddressResponse Address,
+    IReadOnlyList<PublicBusinessSummaryServiceResponse> Services,
+    IReadOnlyList<PublicBusinessWorkingHourResponse> WorkingHours,
+    IReadOnlyList<PublicBusinessPhotoResponse> Photos,
+    PublicBusinessReviewSummaryResponse ReviewSummary,
+    IReadOnlyList<string> AdditionalInformation);
 
 public sealed record PublicBusinessSummaryServiceResponse(
     Guid Id,

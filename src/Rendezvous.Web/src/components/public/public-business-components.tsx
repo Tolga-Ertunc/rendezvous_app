@@ -152,6 +152,20 @@ export function PublicBusinessDetailView({
   }, [])
 
   useEffect(() => {
+    const hash = window.location.hash.replace("#", "")
+
+    if (!hash) {
+      return
+    }
+
+    window.setTimeout(() => {
+      document
+        .getElementById(hash)
+        ?.scrollIntoView({ behavior: "smooth", block: "start" })
+    }, 0)
+  }, [business.id])
+
+  useEffect(() => {
     function updateActiveSection() {
       const pageBottom =
         window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 8

@@ -2,49 +2,65 @@
 
 import type { ReactNode } from "react"
 import Link from "next/link"
-import { CalendarDays } from "lucide-react"
+import { CalendarDays, Compass, UserRound } from "lucide-react"
 
-import { AuthHeaderActions } from "@/components/auth/auth-header-actions"
+import { buttonVariants } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
 
 type PublicShellProps = {
-  title: string
-  description: string
   children: ReactNode
-  actions?: ReactNode
 }
 
-export function PublicShell({
-  title,
-  description,
-  children,
-  actions,
-}: PublicShellProps) {
+export function PublicShell({ children }: PublicShellProps) {
   return (
-    <main className="min-h-svh bg-[linear-gradient(180deg,oklch(0.99_0_0),oklch(0.965_0.01_220))] px-4 py-6 sm:px-6 lg:px-8">
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
-        <header className="flex flex-col gap-4 border-b border-border pb-6 sm:flex-row sm:items-center sm:justify-between">
-          <div className="space-y-2">
+    <main className="min-h-svh bg-white text-[#111111]">
+      <header className="border-b border-[#e5e7eb] bg-white">
+        <div className="mx-auto flex w-full max-w-[1220px] flex-col gap-4 px-4 py-5 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
+          <div className="space-y-1">
             <Link
               href="/"
-              className="inline-flex items-center gap-2 text-sm font-medium text-primary"
+              className="inline-flex text-3xl font-bold leading-none tracking-normal text-[#111111]"
             >
-              <CalendarDays className="size-4" aria-hidden="true" />
               Rendezvous
             </Link>
-            <div className="space-y-1">
-              <h1 className="text-2xl font-semibold text-foreground">
-                {title}
-              </h1>
-              <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
-                {description}
-              </p>
-            </div>
+            <p className="text-base text-[#71717a]">Find a business</p>
           </div>
-          <div className="flex shrink-0 flex-wrap gap-2">
-            {actions}
-            <AuthHeaderActions />
-          </div>
-        </header>
+
+          <nav className="flex flex-wrap items-center gap-3">
+            <Link
+              href="/"
+              className={cn(
+                buttonVariants({ variant: "outline", size: "lg" }),
+                "h-11 rounded-xl border-[#cfe7c7] bg-[#f4fbf1] px-5 text-base font-medium text-[#4f9d3a] hover:bg-[#eef8ea] hover:text-[#4f9d3a]"
+              )}
+            >
+              <Compass className="mr-2 size-5" aria-hidden="true" />
+              Discover
+            </Link>
+            <Link
+              href="/profile"
+              className={cn(
+                buttonVariants({ variant: "outline", size: "lg" }),
+                "h-11 rounded-xl border-[#d4d4d8] bg-white px-5 text-base font-medium text-[#111111] hover:bg-[#f4f4f5]"
+              )}
+            >
+              <UserRound className="mr-2 size-5" aria-hidden="true" />
+              Profile
+            </Link>
+            <Link
+              href="/appointments"
+              className={cn(
+                buttonVariants({ variant: "outline", size: "lg" }),
+                "h-11 rounded-xl border-[#d4d4d8] bg-white px-5 text-base font-medium text-[#111111] hover:bg-[#f4f4f5]"
+              )}
+            >
+              <CalendarDays className="mr-2 size-5" aria-hidden="true" />
+              My appointments
+            </Link>
+          </nav>
+        </div>
+      </header>
+      <div className="mx-auto flex w-full max-w-[1220px] flex-col gap-8 px-4 py-8 sm:px-6 lg:px-8">
         {children}
       </div>
     </main>
