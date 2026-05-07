@@ -17,6 +17,7 @@ export type PublicBusinessSummaryService = {
 
 export type PublicBusinessService = PublicBusinessSummaryService & {
   categoryName: string
+  description: string
   basePriceAmount: number
 }
 

@@ -432,6 +432,7 @@ export function OwnerServicesPanel({
   const [newService, setNewService] = useState<ServiceDraft>({
     name: "",
     categoryName: "Featured",
+    description: "",
     durationMinutes: 30,
     basePriceAmount: 0,
     currencyCode: "TRY",
@@ -496,6 +497,7 @@ export function OwnerServicesPanel({
       setNewService({
         name: "",
         categoryName: "Featured",
+        description: "",
         durationMinutes: 30,
         basePriceAmount: 0,
         currencyCode: "TRY",
@@ -688,6 +690,21 @@ export function OwnerServicesPanel({
               }
             />
           </Field>
+          <div className="md:col-span-6">
+            <Field label="Description">
+              <textarea
+                value={newService.description}
+                maxLength={1200}
+                className="min-h-24 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none transition-[color,box-shadow] focus-visible:ring-3 focus-visible:ring-ring/35"
+                onChange={(event) =>
+                  setNewService({
+                    ...newService,
+                    description: event.target.value,
+                  })
+                }
+              />
+            </Field>
+          </div>
           <Button
             type="button"
             className="rounded-full bg-[#111111] px-5 text-white hover:bg-[#27272a]"
@@ -781,6 +798,24 @@ export function OwnerServicesPanel({
                     }
                   />
                 </Field>
+                <div className="md:col-span-6">
+                  <Field label="Description">
+                    <textarea
+                      value={draft.description}
+                      maxLength={1200}
+                      className="min-h-24 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none transition-[color,box-shadow] focus-visible:ring-3 focus-visible:ring-ring/35"
+                      onChange={(event) =>
+                        setDrafts({
+                          ...drafts,
+                          [service.id]: {
+                            ...draft,
+                            description: event.target.value,
+                          },
+                        })
+                      }
+                    />
+                  </Field>
+                </div>
                 <div className="flex flex-wrap gap-2">
                   <Button
                     type="button"
@@ -1581,6 +1616,7 @@ function toServiceDraft(service: BusinessService): ServiceDraft {
   return {
     name: service.name,
     categoryName: service.categoryName,
+    description: service.description,
     durationMinutes: service.durationMinutes,
     basePriceAmount: service.basePriceAmount,
     currencyCode: service.currencyCode,
@@ -1592,6 +1628,7 @@ function normalizeServiceDraft(draft: ServiceDraft): ServiceDraft {
   return {
     name: draft.name,
     categoryName: draft.categoryName.trim() || "Featured",
+    description: draft.description.trim(),
     durationMinutes: Number(draft.durationMinutes),
     basePriceAmount: Number(draft.basePriceAmount),
     currencyCode: draft.currencyCode,
@@ -1609,6 +1646,7 @@ function formatAppointmentTime(value: string) {
 type ServiceDraft = {
   name: string
   categoryName: string
+  description: string
   durationMinutes: number
   basePriceAmount: number
   currencyCode: string

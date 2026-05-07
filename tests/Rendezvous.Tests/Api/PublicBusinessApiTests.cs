@@ -50,6 +50,7 @@ public class PublicBusinessApiTests : IClassFixture<RendezvousApiFactory>
         business.Services.Should().ContainSingle(service =>
             service.Name == "Haircut"
             && service.CategoryName == "Hair Cut"
+            && service.Description == "Classic haircut."
             && service.BasePriceAmount == 250);
         business.WorkingHours.Should().ContainSingle(hour =>
             hour.DayOfWeek == "Wednesday"
@@ -98,6 +99,7 @@ public class PublicBusinessApiTests : IClassFixture<RendezvousApiFactory>
                 BusinessId = approvedBusiness.Id,
                 Name = "Haircut",
                 CategoryName = "Hair Cut",
+                Description = "Classic haircut.",
                 DurationMinutes = 30,
                 BasePriceAmount = 250,
                 CurrencyCode = "TRY",
@@ -108,6 +110,7 @@ public class PublicBusinessApiTests : IClassFixture<RendezvousApiFactory>
                 BusinessId = approvedBusiness.Id,
                 Name = "Inactive Color",
                 CategoryName = "Hair Dye",
+                Description = "Inactive color service.",
                 DurationMinutes = 90,
                 BasePriceAmount = 900,
                 CurrencyCode = "TRY",
@@ -118,6 +121,7 @@ public class PublicBusinessApiTests : IClassFixture<RendezvousApiFactory>
                 BusinessId = pendingBusiness.Id,
                 Name = "Pending Service",
                 CategoryName = "Featured",
+                Description = "Pending service.",
                 DurationMinutes = 30,
                 BasePriceAmount = 100,
                 CurrencyCode = "TRY",
@@ -195,6 +199,7 @@ public class PublicBusinessApiTests : IClassFixture<RendezvousApiFactory>
         Guid Id,
         string Name,
         string CategoryName,
+        string Description,
         int DurationMinutes,
         decimal BasePriceAmount,
         string CurrencyCode);

@@ -55,6 +55,7 @@ public class OwnerServicesController : ControllerBase
             BusinessId = businessId,
             Name = request.Name.Trim(),
             CategoryName = categoryName,
+            Description = NormalizeDescription(request.Description),
             DurationMinutes = request.DurationMinutes,
             BasePriceAmount = request.BasePriceAmount,
             CurrencyCode = request.CurrencyCode.Trim().ToUpperInvariant(),
@@ -112,6 +113,7 @@ public class OwnerServicesController : ControllerBase
 
         service.Name = request.Name.Trim();
         service.CategoryName = categoryName;
+        service.Description = NormalizeDescription(request.Description);
         service.DurationMinutes = request.DurationMinutes;
         service.BasePriceAmount = request.BasePriceAmount;
         service.CurrencyCode = request.CurrencyCode.Trim().ToUpperInvariant();
@@ -247,6 +249,11 @@ public class OwnerServicesController : ControllerBase
             return "Service category cannot exceed 120 characters.";
         }
 
+        if (request.Description is not null && request.Description.Length > 1200)
+        {
+            return "Service description cannot exceed 1200 characters.";
+        }
+
         return null;
     }
 
@@ -256,6 +263,7 @@ public class OwnerServicesController : ControllerBase
             service.Id,
             service.Name,
             service.CategoryName,
+            service.Description,
             service.DurationMinutes,
             service.BasePriceAmount,
             service.CurrencyCode,
@@ -267,6 +275,11 @@ public class OwnerServicesController : ControllerBase
         return string.IsNullOrWhiteSpace(categoryName)
             ? "Featured"
             : categoryName.Trim();
+    }
+
+    private static string NormalizeDescription(string? description)
+    {
+        return description?.Trim() ?? string.Empty;
     }
 
     private Guid? GetCurrentUserId()
@@ -282,6 +295,7 @@ public class OwnerServicesController : ControllerBase
 public sealed record OwnerServiceRequest(
     string Name,
     string? CategoryName,
+    string? Description,
     int DurationMinutes,
     decimal BasePriceAmount,
     string CurrencyCode,
@@ -291,6 +305,7 @@ public sealed record OwnerServiceMutationResponse(
     Guid Id,
     string Name,
     string CategoryName,
+    string Description,
     int DurationMinutes,
     decimal BasePriceAmount,
     string CurrencyCode,

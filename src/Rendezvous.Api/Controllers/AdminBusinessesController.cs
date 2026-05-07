@@ -97,6 +97,8 @@ public class AdminBusinessesController : ControllerBase
             .Select(service => new AdminBusinessServiceResponse(
                 service.Id,
                 service.Name,
+                service.CategoryName,
+                service.Description,
                 service.DurationMinutes,
                 service.BasePriceAmount,
                 service.CurrencyCode,
@@ -214,6 +216,8 @@ public sealed record AdminBusinessOwnerResponse(
 public sealed record AdminBusinessServiceResponse(
     Guid Id,
     string Name,
+    string CategoryName,
+    string Description,
     int DurationMinutes,
     decimal BasePriceAmount,
     string CurrencyCode,

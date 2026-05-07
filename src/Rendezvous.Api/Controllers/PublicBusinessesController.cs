@@ -126,6 +126,7 @@ public class PublicBusinessesController : ControllerBase
                 service.Id,
                 service.Name,
                 service.CategoryName,
+                service.Description,
                 service.DurationMinutes,
                 service.BasePriceAmount,
                 service.CurrencyCode))
@@ -295,6 +296,7 @@ public sealed record PublicBusinessServiceResponse(
     Guid Id,
     string Name,
     string CategoryName,
+    string Description,
     int DurationMinutes,
     decimal BasePriceAmount,
     string CurrencyCode);

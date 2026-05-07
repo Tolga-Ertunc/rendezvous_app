@@ -20,6 +20,11 @@ public class BusinessServiceConfiguration : IEntityTypeConfiguration<BusinessSer
             .HasDefaultValue("Featured")
             .IsRequired();
 
+        builder.Property(service => service.Description)
+            .HasMaxLength(1200)
+            .HasDefaultValue(string.Empty)
+            .IsRequired();
+
         builder.Property(service => service.BasePriceAmount)
             .HasPrecision(18, 2);
 

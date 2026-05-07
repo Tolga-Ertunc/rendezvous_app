@@ -144,6 +144,7 @@ public static class DevelopmentDataSeeder
                 BusinessId = BusinessId,
                 Name = "Haircut",
                 CategoryName = "Hair Cut",
+                Description = "A clean, tailored haircut finished with neckline detailing.",
                 DurationMinutes = 30,
                 BasePriceAmount = 500,
                 CurrencyCode = "TRY",
@@ -155,6 +156,7 @@ public static class DevelopmentDataSeeder
                 BusinessId = BusinessId,
                 Name = "Beard Trim",
                 CategoryName = "Beard Trim",
+                Description = "Beard shaping, trim and line-up for a sharp finish.",
                 DurationMinutes = 20,
                 BasePriceAmount = 300,
                 CurrencyCode = "TRY",
@@ -166,6 +168,7 @@ public static class DevelopmentDataSeeder
                 BusinessId = BusinessId,
                 Name = "Haircut and Beard",
                 CategoryName = "Featured",
+                Description = "Full haircut and beard service with detailed finishing.",
                 DurationMinutes = 45,
                 BasePriceAmount = 750,
                 CurrencyCode = "TRY",
@@ -177,6 +180,7 @@ public static class DevelopmentDataSeeder
                 BusinessId = BusinessId,
                 Name = "Hair Dye",
                 CategoryName = "Hair Dye",
+                Description = "Color service planned around the current cut and desired finish.",
                 DurationMinutes = 60,
                 BasePriceAmount = 900,
                 CurrencyCode = "TRY",
@@ -226,6 +230,7 @@ public static class DevelopmentDataSeeder
                 BusinessId = BusinessId,
                 Name = "Hair Dye",
                 CategoryName = "Hair Dye",
+                Description = "Color service planned around the current cut and desired finish.",
                 DurationMinutes = 60,
                 BasePriceAmount = 900,
                 CurrencyCode = "TRY",
@@ -245,6 +250,14 @@ public static class DevelopmentDataSeeder
                 "Haircut and Beard" => "Featured",
                 "Hair Dye" => "Hair Dye",
                 _ => "Featured"
+            };
+            service.Description = service.Name switch
+            {
+                "Haircut" => "A clean, tailored haircut finished with neckline detailing.",
+                "Beard Trim" => "Beard shaping, trim and line-up for a sharp finish.",
+                "Haircut and Beard" => "Full haircut and beard service with detailed finishing.",
+                "Hair Dye" => "Color service planned around the current cut and desired finish.",
+                _ => service.Description
             };
         }
 

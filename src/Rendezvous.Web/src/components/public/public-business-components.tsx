@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import Image from "next/image"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import {
   ArrowLeft,
   Baby,
@@ -23,7 +24,9 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button, buttonVariants } from "@/components/ui/button"
+import { PublicBookingFlow } from "@/components/public/public-booking-flow"
 import { Separator } from "@/components/ui/separator"
+import { getAccessToken, subscribeToAuthTokenChanges } from "@/lib/auth-storage"
 import type {
   PublicBusiness,
   PublicBusinessDetail,
@@ -110,8 +113,14 @@ export function PublicBusinessDetailView({
 }: {
   business: PublicBusinessDetail
 }) {
+  const router = useRouter()
   const [activeSection, setActiveSection] = useState("services")
   const [activeCategory, setActiveCategory] = useState("Featured")
+  const [bookingOpen, setBookingOpen] = useState(false)
+  const [initialBookingServiceId, setInitialBookingServiceId] = useState<
+    string | null
+  >(null)
+  const [isSignedIn, setIsSignedIn] = useState(() => Boolean(getAccessToken()))
   const [expandedReviewIds, setExpandedReviewIds] = useState<Set<string>>(
     () => new Set()
   )
@@ -135,6 +144,12 @@ export function PublicBusinessDetailView({
     () => orderWorkingHours(business.workingHours),
     [business.workingHours]
   )
+
+  useEffect(() => {
+    return subscribeToAuthTokenChanges(() => {
+      setIsSignedIn(Boolean(getAccessToken()))
+    })
+  }, [])
 
   useEffect(() => {
     function updateActiveSection() {
@@ -183,6 +198,16 @@ export function PublicBusinessDetailView({
 
       return next
     })
+  }
+
+  function openBookingFlow(serviceId: string | null) {
+    if (!isSignedIn) {
+      router.push("/register?reason=booking")
+      return
+    }
+
+    setInitialBookingServiceId(serviceId)
+    setBookingOpen(true)
   }
 
   return (
@@ -259,6 +284,7 @@ export function PublicBusinessDetailView({
             activeCategory={selectedCategory}
             onCategoryChange={setActiveCategory}
             services={visibleServices}
+            onBookService={(serviceId) => openBookingFlow(serviceId)}
           />
           <TeamSection business={business} />
           <ReviewsSection
@@ -278,9 +304,16 @@ export function PublicBusinessDetailView({
             business={business}
             status={status}
             workingHours={orderedWorkingHours}
+            onBookNow={() => openBookingFlow(null)}
           />
         </aside>
       </div>
+      <PublicBookingFlow
+        open={bookingOpen}
+        business={business}
+        initialServiceId={initialBookingServiceId}
+        onOpenChange={setBookingOpen}
+      />
     </main>
   )
 }
@@ -377,11 +410,13 @@ function ServicesSection({
   activeCategory,
   onCategoryChange,
   services,
+  onBookService,
 }: {
   categories: string[]
   activeCategory: string
   onCategoryChange: (category: string) => void
   services: PublicBusinessService[]
+  onBookService: (serviceId: string) => void
 }) {
   return (
     <section id="services" className="scroll-mt-24 space-y-8">
@@ -416,6 +451,11 @@ function ServicesSection({
               <p className="text-xl text-[#71717a]">
                 {formatDuration(service.durationMinutes)}
               </p>
+              {service.description ? (
+                <p className="line-clamp-2 text-lg leading-7 text-[#71717a]">
+                  {service.description}
+                </p>
+              ) : null}
               <p className="text-xl font-medium">
                 from{" "}
                 {formatCurrency(service.basePriceAmount, service.currencyCode)}
@@ -425,6 +465,7 @@ function ServicesSection({
               type="button"
               variant="outline"
               className="h-[52px] min-w-[104px] rounded-full border-[#d4d4d8] bg-white px-7 text-xl font-medium text-[#111111] hover:bg-[#f4f4f5]"
+              onClick={() => onBookService(service.id)}
             >
               Book
             </Button>
@@ -446,10 +487,12 @@ function BookingPanel({
   business,
   status,
   workingHours,
+  onBookNow,
 }: {
   business: PublicBusinessDetail
   status: OpenStatus
   workingHours: PublicBusinessWorkingHour[]
+  onBookNow: () => void
 }) {
   return (
     <div className="overflow-hidden rounded-2xl border border-[#e5e7eb] bg-white shadow-[0_8px_28px_rgba(17,17,17,0.06)]">
@@ -474,6 +517,7 @@ function BookingPanel({
         <Button
           type="button"
           className="h-16 w-full rounded-full bg-[#111111] text-xl font-bold text-white hover:bg-[#27272a]"
+          onClick={onBookNow}
         >
           Book now
         </Button>

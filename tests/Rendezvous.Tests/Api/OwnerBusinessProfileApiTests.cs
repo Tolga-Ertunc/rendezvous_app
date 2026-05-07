@@ -62,6 +62,7 @@ public class OwnerBusinessProfileApiTests : IClassFixture<RendezvousApiFactory>
             {
                 name = "Haircut",
                 categoryName = "Adult Haircut Service",
+                description = "Updated service copy.",
                 durationMinutes = 45,
                 basePriceAmount = 700,
                 currencyCode = "TRY",
@@ -80,7 +81,9 @@ public class OwnerBusinessProfileApiTests : IClassFixture<RendezvousApiFactory>
         ownerBusiness.ServiceCategories.Should().Contain(category =>
             category.Name == "Adult Haircut Service" && !category.IsSystem);
         ownerBusiness.Services.Should().ContainSingle(service =>
-            service.Id == serviceId && service.CategoryName == "Adult Haircut Service");
+            service.Id == serviceId
+            && service.CategoryName == "Adult Haircut Service"
+            && service.Description == "Updated service copy.");
 
         client.DefaultRequestHeaders.Authorization = null;
         var publicBusiness = await client.GetFromJsonAsync<PublicBusinessDetailResponse>(
@@ -88,7 +91,9 @@ public class OwnerBusinessProfileApiTests : IClassFixture<RendezvousApiFactory>
         publicBusiness!.Name.Should().Be("Updated Cuts");
         publicBusiness.Address.District.Should().Be("Kadikoy");
         publicBusiness.Services.Should().ContainSingle(service =>
-            service.CategoryName == "Adult Haircut Service" && service.BasePriceAmount == 700);
+            service.CategoryName == "Adult Haircut Service"
+            && service.Description == "Updated service copy."
+            && service.BasePriceAmount == 700);
         publicBusiness.AdditionalInformation.Should().Contain("Pay by app");
     }
 
@@ -175,6 +180,7 @@ public class OwnerBusinessProfileApiTests : IClassFixture<RendezvousApiFactory>
             BusinessId = business.Id,
             Name = "Haircut",
             CategoryName = "Hair Cut",
+            Description = "Original service copy.",
             DurationMinutes = 30,
             BasePriceAmount = 500,
             CurrencyCode = "TRY",
@@ -291,7 +297,8 @@ public class OwnerBusinessProfileApiTests : IClassFixture<RendezvousApiFactory>
 
     private sealed record OwnerBusinessServiceResponse(
         Guid Id,
-        string CategoryName);
+        string CategoryName,
+        string Description);
 
     private sealed record OwnerBusinessPhotoResponse(
         Guid Id,
@@ -308,5 +315,6 @@ public class OwnerBusinessProfileApiTests : IClassFixture<RendezvousApiFactory>
 
     private sealed record PublicBusinessServiceResponse(
         string CategoryName,
+        string Description,
         decimal BasePriceAmount);
 }

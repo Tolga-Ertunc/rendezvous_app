@@ -49,6 +49,7 @@ export type BusinessService = {
   id: string
   name: string
   categoryName: string
+  description: string
   durationMinutes: number
   basePriceAmount: number
   currencyCode: string
@@ -246,6 +247,7 @@ export type AvailabilityExceptionConflict = {
 export type OwnerServiceRequest = {
   name: string
   categoryName: string
+  description: string
   durationMinutes: number
   basePriceAmount: number
   currencyCode: string
