@@ -120,8 +120,13 @@ export function OwnerBusinessProfilePanel({
       await updateOwnerBusinessProfile(business.id, draft)
       setMessage("Business profile updated.")
       await onChanged()
-    } catch {
-      setError("Business profile could not be updated.")
+    } catch (caughtError) {
+      setError(
+        getApiErrorMessage(
+          caughtError,
+          "Business profile could not be updated."
+        )
+      )
     } finally {
       setActingId("")
     }
@@ -143,8 +148,8 @@ export function OwnerBusinessProfilePanel({
       event.target.value = ""
       setMessage("Photo uploaded.")
       await onChanged()
-    } catch {
-      setError("Photo could not be uploaded.")
+    } catch (caughtError) {
+      setError(getApiErrorMessage(caughtError, "Photo could not be uploaded."))
     } finally {
       setActingId("")
     }
@@ -159,8 +164,8 @@ export function OwnerBusinessProfilePanel({
       await deleteOwnerBusinessPhoto(business.id, photoId)
       setMessage("Photo deleted.")
       await onChanged()
-    } catch {
-      setError("Photo could not be deleted.")
+    } catch (caughtError) {
+      setError(getApiErrorMessage(caughtError, "Photo could not be deleted."))
     } finally {
       setActingId("")
     }
@@ -187,8 +192,10 @@ export function OwnerBusinessProfilePanel({
       await reorderOwnerBusinessPhotos(business.id, orderedPhotoIds)
       setMessage("Photo order updated.")
       await onChanged()
-    } catch {
-      setError("Photo order could not be updated.")
+    } catch (caughtError) {
+      setError(
+        getApiErrorMessage(caughtError, "Photo order could not be updated.")
+      )
     } finally {
       setActingId("")
     }

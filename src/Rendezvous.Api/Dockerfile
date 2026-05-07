@@ -4,7 +4,8 @@ EXPOSE 8080
 ENV ASPNETCORE_URLS=http://+:8080
 ENV Media__UploadRoot=/var/lib/rendezvous/uploads
 
-RUN addgroup -S rendezvous \
+RUN apk add --no-cache tzdata \
+    && addgroup -S rendezvous \
     && adduser -S -G rendezvous rendezvous \
     && mkdir -p /var/lib/rendezvous/uploads \
     && chown -R rendezvous:rendezvous /var/lib/rendezvous
