@@ -6,6 +6,7 @@ import {
   BriefcaseBusiness,
   Building2,
   CalendarDays,
+  MailCheck,
   ShieldCheck,
   UsersRound,
 } from "lucide-react"
@@ -58,6 +59,13 @@ function ProfileLanding({ user }: { user: CurrentUser }) {
           href="/profile/owner-onboarding"
           icon={Building2}
           actionLabel="Open application"
+        />
+        <ActionCard
+          title="Accept invitation"
+          description="Join a business as staff with your one-time invitation token."
+          href="/invitations/accept"
+          icon={MailCheck}
+          actionLabel="Accept invitation"
         />
         {isEmployee ? (
           <ActionCard

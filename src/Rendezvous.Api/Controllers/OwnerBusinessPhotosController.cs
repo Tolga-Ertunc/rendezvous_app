@@ -26,7 +26,7 @@ public class OwnerBusinessPhotosController : ControllerBase
     }
 
     [HttpPost]
-    [RequestSizeLimit(BusinessPhotoStorageService.MaxFileSizeBytes + 1024)]
+    [RequestSizeLimit(BusinessPhotoStorageService.MaxUploadRequestSizeBytes)]
     public async Task<ActionResult<OwnerBusinessPhotoResponse>> Upload(
         Guid businessId,
         [FromForm] IFormFile file,

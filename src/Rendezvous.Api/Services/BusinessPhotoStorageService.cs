@@ -5,6 +5,7 @@ namespace Rendezvous.Api.Services;
 public class BusinessPhotoStorageService
 {
     public const long MaxFileSizeBytes = 5 * 1024 * 1024;
+    public const long MaxUploadRequestSizeBytes = 6 * 1024 * 1024;
     private static readonly IReadOnlyDictionary<string, string> AllowedContentTypes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
     {
         [".jpg"] = "image/jpeg",

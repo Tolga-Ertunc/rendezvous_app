@@ -4,6 +4,9 @@ const apiBaseUrl = process.env.RENDEZVOUS_API_BASE_URL ?? "http://localhost:5000
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  experimental: {
+    proxyClientMaxBodySize: "6mb",
+  },
   async rewrites() {
     return [
       {

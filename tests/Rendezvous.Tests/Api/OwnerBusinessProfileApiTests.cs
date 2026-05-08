@@ -133,6 +133,21 @@ public class OwnerBusinessProfileApiTests : IClassFixture<RendezvousApiFactory>
     }
 
     [Fact]
+    public async Task Owner_photo_upload_accepts_png_under_file_size_limit()
+    {
+        var (ownerToken, owner) = await RegisterAndGetCurrentUserAsync("large-photo-owner@example.com");
+        var (businessId, _) = await SeedOwnedBusinessAsync(owner.Id);
+        client.DefaultRequestHeaders.Authorization = new("Bearer", ownerToken);
+        using var form = CreatePhotoForm("photo1.png", "image/png", 2 * 1024 * 1024);
+
+        var response = await client.PostAsync(
+            $"/api/owner/businesses/{businessId}/photos",
+            form);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+    }
+
+    [Fact]
     public async Task Owner_photo_upload_rejects_invalid_extension_and_more_than_four_photos()
     {
         var (ownerToken, owner) = await RegisterAndGetCurrentUserAsync("photo-limit-owner@example.com");
@@ -266,10 +281,12 @@ public class OwnerBusinessProfileApiTests : IClassFixture<RendezvousApiFactory>
         return tokenResponse!.AccessToken;
     }
 
-    private static MultipartFormDataContent CreatePhotoForm(string fileName, string contentType)
+    private static MultipartFormDataContent CreatePhotoForm(string fileName, string contentType, int byteCount = 4)
     {
         var form = new MultipartFormDataContent();
-        var fileContent = new ByteArrayContent([1, 2, 3, 4]);
+        var payload = new byte[byteCount];
+        payload[0] = 1;
+        var fileContent = new ByteArrayContent(payload);
         fileContent.Headers.ContentType = new MediaTypeHeaderValue(contentType);
         form.Add(fileContent, "file", fileName);
         form.Add(new StringContent(fileName), "altText");
