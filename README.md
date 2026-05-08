@@ -1,3 +1,4 @@
+<img width="995" height="651" alt="Screenshot 2026-05-08 at 10 59 00" src="https://github.com/user-attachments/assets/f4178b34-8e7b-4149-8a03-e6f8c402ea1b" />
 # Rendezvous
 
 Rendezvous is a web-based appointment booking platform for businesses and their customers. The first product focus is barber shops, but the core model is intentionally designed around generic businesses, services, staff members, working hours, and appointments so the platform can later support other appointment-driven business types.
