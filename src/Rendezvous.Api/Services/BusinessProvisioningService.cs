@@ -1,7 +1,9 @@
+using Microsoft.EntityFrameworkCore;
 using Rendezvous.Domain.Availability;
 using Rendezvous.Domain.Businesses;
 using Rendezvous.Domain.Services;
 using Rendezvous.Domain.Staff;
+using Rendezvous.Infrastructure.Identity;
 using Rendezvous.Infrastructure.Persistence;
 
 namespace Rendezvous.Api.Services;
@@ -15,12 +17,13 @@ public class BusinessProvisioningService
         this.dbContext = dbContext;
     }
 
-    public Business CreateOwnedBusiness(
+    public async Task<Business> CreateOwnedBusinessAsync(
         Guid ownerUserId,
         string businessName,
         BusinessType businessType,
         string ownerStaffDisplayName,
-        BusinessStatus status)
+        BusinessStatus status,
+        CancellationToken cancellationToken)
     {
         var business = new Business
         {
@@ -40,12 +43,27 @@ public class BusinessProvisioningService
             CreatedAtUtc = DateTime.UtcNow
         };
 
+        var ownerName = await dbContext.Users
+            .AsNoTracking()
+            .Where(user => user.Id == ownerUserId)
+            .Select(user => new
+            {
+                user.FirstName,
+                user.LastName
+            })
+            .SingleOrDefaultAsync(cancellationToken);
+        var defaultStaffDisplayName = ownerName is null
+            ? business.Name
+            : UserNames.FormatFullName(ownerName.FirstName, ownerName.LastName);
+
         var staffMember = new StaffMember
         {
             BusinessId = business.Id,
             UserId = ownerUserId,
             DisplayName = string.IsNullOrWhiteSpace(ownerStaffDisplayName)
-                ? business.Name
+                ? string.IsNullOrWhiteSpace(defaultStaffDisplayName)
+                    ? business.Name
+                    : defaultStaffDisplayName
                 : ownerStaffDisplayName.Trim(),
             IsActive = true
         };

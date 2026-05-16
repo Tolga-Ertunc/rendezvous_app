@@ -181,6 +181,10 @@ export function AdminUsersPanel() {
           user.id === nextUser.id
             ? {
                 ...user,
+                firstName: nextUser.firstName,
+                lastName: nextUser.lastName,
+                fullName: nextUser.fullName,
+                email: nextUser.email,
                 isSuspended: nextUser.isSuspended,
                 roles: nextUser.roles,
               }
@@ -210,7 +214,7 @@ export function AdminUsersPanel() {
         <CardContent className="space-y-4">
           <div className="flex flex-col gap-2 sm:flex-row">
             <Input
-              placeholder="Search users"
+              placeholder="Search by name, email, or public number"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
             />
@@ -239,7 +243,7 @@ export function AdminUsersPanel() {
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <p className="break-all text-sm font-medium text-foreground">
-                          {user.email}
+                          {user.fullName || "Name not set"}
                         </p>
                         {user.isSuspended ? (
                           <Badge className="border-destructive/30 bg-destructive/10 text-destructive">
@@ -247,8 +251,8 @@ export function AdminUsersPanel() {
                           </Badge>
                         ) : null}
                       </div>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        Public number: {user.publicNumber}
+                      <p className="mt-1 break-all text-xs text-muted-foreground">
+                        {user.email} · Public number: {user.publicNumber}
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-2">
@@ -279,7 +283,7 @@ export function AdminUsersPanel() {
           <CardTitle>User management</CardTitle>
           <CardDescription>
             {selectedUser
-              ? selectedUser.email
+              ? `${selectedUser.fullName || "Name not set"} · ${selectedUser.email}`
               : "Select a user to manage access."}
           </CardDescription>
         </CardHeader>

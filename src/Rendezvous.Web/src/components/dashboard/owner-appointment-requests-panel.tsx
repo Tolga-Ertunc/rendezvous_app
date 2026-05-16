@@ -170,7 +170,7 @@ export function OwnerAppointmentRequestsPanel({
                     <div className="grid gap-1 text-sm text-muted-foreground sm:grid-cols-2">
                       <p>{formatAppointmentTime(request.startsAtUtc)}</p>
                       <p>Staff: {request.staffDisplayName}</p>
-                      <p>Customer: {request.customerPublicNumber}</p>
+                      <p>Customer: {request.customerFullName || "Name not set"}</p>
                       <p>
                         Price: {request.priceAmount} {request.currencyCode}
                       </p>

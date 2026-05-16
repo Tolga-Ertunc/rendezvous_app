@@ -45,6 +45,8 @@ export default function RegisterPage() {
 function RegisterPageContent() {
   const searchParams = useSearchParams()
   const isBookingReason = searchParams.get("reason") === "booking"
+  const [firstName, setFirstName] = useState("")
+  const [lastName, setLastName] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
@@ -63,6 +65,11 @@ function RegisterPageContent() {
     setEmailError("")
     setTermsError(false)
 
+    if (!firstName.trim() || !lastName.trim()) {
+      setError("First name and last name are required.")
+      return
+    }
+
     if (password !== confirmPassword) {
       setError("Passwords do not match.")
       return
@@ -76,7 +83,7 @@ function RegisterPageContent() {
     setIsSubmitting(true)
 
     try {
-      await register(email, password, confirmPassword)
+      await register(firstName, lastName, email, password, confirmPassword)
       clearAuthTokens()
       setPendingEmail(email.trim())
     } catch (caughtError) {
@@ -85,7 +92,7 @@ function RegisterPageContent() {
       if (caughtError instanceof ApiError && caughtError.status === 409) {
         setEmailError("An account with this email already exists.")
       } else if (caughtError instanceof ApiError && caughtError.status === 400) {
-        setError("Registration failed. Check the email and password rules.")
+        setError("Registration failed. Check the name, email, and password rules.")
       } else {
         setError("Registration failed. Check the API server and try again.")
       }
@@ -152,6 +159,30 @@ function RegisterPageContent() {
             </CardHeader>
             <CardContent>
               <form className="space-y-4" onSubmit={handleSubmit}>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="first-name">First name</Label>
+                  <Input
+                    id="first-name"
+                    name="first-name"
+                    autoComplete="given-name"
+                    value={firstName}
+                    onChange={(event) => setFirstName(event.target.value)}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="last-name">Last name</Label>
+                  <Input
+                    id="last-name"
+                    name="last-name"
+                    autoComplete="family-name"
+                    value={lastName}
+                    onChange={(event) => setLastName(event.target.value)}
+                    required
+                  />
+                </div>
+              </div>
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
                 <Input

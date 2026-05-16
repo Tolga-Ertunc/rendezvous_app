@@ -286,7 +286,7 @@ function EmployeeAppointmentRow({
           <div className="grid gap-1 text-sm text-muted-foreground sm:grid-cols-2">
             <p>{formatAppointmentTime(item.startsAtUtc)}</p>
             <p>Business: {item.businessName}</p>
-            <p>Customer: {item.customerPublicNumber}</p>
+            <p>Customer: {item.customerFullName || "Name not set"}</p>
             <p>
               Price: {item.priceAmount} {item.currencyCode}
             </p>

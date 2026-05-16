@@ -20,6 +20,12 @@ public class PendingEmailRegistrationConfiguration : IEntityTypeConfiguration<Pe
             .IsRequired()
             .HasMaxLength(256);
 
+        builder.Property(registration => registration.FirstName)
+            .HasMaxLength(UserNames.MaxNameLength);
+
+        builder.Property(registration => registration.LastName)
+            .HasMaxLength(UserNames.MaxNameLength);
+
         builder.Property(registration => registration.PasswordHash)
             .IsRequired()
             .HasMaxLength(512);

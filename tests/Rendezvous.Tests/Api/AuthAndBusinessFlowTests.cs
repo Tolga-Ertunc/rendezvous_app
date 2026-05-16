@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.RegularExpressions;
 using FluentAssertions;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Rendezvous.Api.Email;
@@ -10,6 +11,7 @@ using Rendezvous.Domain.Availability;
 using Rendezvous.Domain.Services;
 using Rendezvous.Domain.Staff;
 using Rendezvous.Domain.Businesses;
+using Rendezvous.Infrastructure.Identity;
 using Rendezvous.Infrastructure.Persistence;
 
 namespace Rendezvous.Tests.Api;
@@ -107,6 +109,13 @@ public class AuthAndBusinessFlowTests : IClassFixture<RendezvousApiFactory>
         var appointmentRequest = await requestResponse.Content.ReadFromJsonAsync<AppointmentRequestResponse>();
 
         client.DefaultRequestHeaders.Authorization = new("Bearer", ownerToken);
+        var ownerRequests = await client.GetFromJsonAsync<IReadOnlyList<OwnerAppointmentRequestListResponse>>(
+            $"/api/owner/businesses/{setup.BusinessId}/appointment-requests");
+
+        ownerRequests.Should().ContainSingle(request =>
+            request.Id == appointmentRequest!.Id
+            && request.CustomerFullName == "Test User");
+
         var approvalResponse = await client.PostAsync(
             $"/api/owner/businesses/{setup.BusinessId}/appointment-requests/{appointmentRequest!.Id}/approve",
             content: null);
@@ -343,6 +352,8 @@ public class AuthAndBusinessFlowTests : IClassFixture<RendezvousApiFactory>
             "/api/auth/register",
             new
             {
+                firstName = "Mismatch",
+                lastName = "User",
                 email = "mismatch@example.com",
                 password = "StrongPass123!",
                 confirmPassword = "DifferentPass123!"
@@ -358,6 +369,8 @@ public class AuthAndBusinessFlowTests : IClassFixture<RendezvousApiFactory>
             "/api/auth/register",
             new
             {
+                firstName = "Short",
+                lastName = "Password",
                 email = "short-password@example.com",
                 password = "Short1!",
                 confirmPassword = "Short1!"
@@ -367,9 +380,29 @@ public class AuthAndBusinessFlowTests : IClassFixture<RendezvousApiFactory>
     }
 
     [Fact]
+    public async Task Register_rejects_missing_first_name_or_last_name()
+    {
+        var response = await client.PostAsJsonAsync(
+            "/api/auth/register",
+            new
+            {
+                firstName = "",
+                lastName = "User",
+                email = "missing-name@example.com",
+                password = "StrongPass123!",
+                confirmPassword = "StrongPass123!"
+            });
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
     public async Task Register_creates_pending_registration_without_real_user()
     {
-        await StartRegistrationAsync("pending-registration@example.com");
+        await StartRegistrationAsync(
+            "pending-registration@example.com",
+            firstName: "  Pending  ",
+            lastName: "  User  ");
 
         using var scope = factory.Services.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -382,6 +415,10 @@ public class AuthAndBusinessFlowTests : IClassFixture<RendezvousApiFactory>
             .AnyAsync(user => user.Email == "pending-registration@example.com"))
             .Should()
             .BeFalse();
+        var pendingRegistration = await dbContext.PendingEmailRegistrations
+            .SingleAsync(registration => registration.Email == "pending-registration@example.com");
+        pendingRegistration.FirstName.Should().Be("Pending");
+        pendingRegistration.LastName.Should().Be("User");
     }
 
     [Fact]
@@ -435,7 +472,10 @@ public class AuthAndBusinessFlowTests : IClassFixture<RendezvousApiFactory>
     [Fact]
     public async Task Confirm_email_creates_confirmed_user_with_user_role()
     {
-        await StartRegistrationAsync("confirm-success@example.com");
+        await StartRegistrationAsync(
+            "confirm-success@example.com",
+            firstName: "Confirm",
+            lastName: "Success");
         var code = GetLatestConfirmationCode("confirm-success@example.com");
 
         var response = await client.PostAsJsonAsync(
@@ -453,6 +493,9 @@ public class AuthAndBusinessFlowTests : IClassFixture<RendezvousApiFactory>
         var me = await client.GetFromJsonAsync<CurrentUserResponse>("/api/auth/me");
 
         me!.Email.Should().Be("confirm-success@example.com");
+        me.FirstName.Should().Be("Confirm");
+        me.LastName.Should().Be("Success");
+        me.FullName.Should().Be("Confirm Success");
         me.Roles.Should().Contain("User");
     }
 
@@ -475,6 +518,8 @@ public class AuthAndBusinessFlowTests : IClassFixture<RendezvousApiFactory>
             "/api/auth/register",
             new
             {
+                firstName = "Uppercase",
+                lastName = "Password",
                 email = "uppercase-password@example.com",
                 password = "PASSWORD1!",
                 confirmPassword = "PASSWORD1!"
@@ -492,6 +537,8 @@ public class AuthAndBusinessFlowTests : IClassFixture<RendezvousApiFactory>
             "/api/auth/register",
             new
             {
+                firstName = "Duplicate",
+                lastName = "User",
                 email = "duplicate-register@example.com",
                 password = "StrongPass123!",
                 confirmPassword = "StrongPass123!"
@@ -592,9 +639,42 @@ public class AuthAndBusinessFlowTests : IClassFixture<RendezvousApiFactory>
             && membership.Status == "Active");
     }
 
-    private async Task<string> RegisterAsync(string email)
+    [Fact]
+    public async Task Admin_users_include_names_and_can_search_by_name()
     {
-        await StartRegistrationAsync(email);
+        var (_, targetUser) = await RegisterAndGetCurrentUserAsync(
+            "search-name-user@example.com",
+            firstName: "Searchable",
+            lastName: "Customer");
+        var adminEmail = "admin-search-users@example.com";
+        await RegisterAsync(adminEmail, firstName: "Admin", lastName: "Manager");
+        await AddAdminRoleAsync(adminEmail);
+        var adminToken = await LoginAsync(adminEmail);
+        client.DefaultRequestHeaders.Authorization = new("Bearer", adminToken);
+
+        var users = await client.GetFromJsonAsync<IReadOnlyList<AdminUserSummaryResponse>>(
+            "/api/admin/users?search=Searchable");
+
+        users.Should().ContainSingle(user =>
+            user.Id == targetUser.Id
+            && user.FirstName == "Searchable"
+            && user.LastName == "Customer"
+            && user.FullName == "Searchable Customer");
+
+        var detail = await client.GetFromJsonAsync<AdminUserDetailResponse>(
+            $"/api/admin/users/{targetUser.Id}");
+
+        detail!.FirstName.Should().Be("Searchable");
+        detail.LastName.Should().Be("Customer");
+        detail.FullName.Should().Be("Searchable Customer");
+    }
+
+    private async Task<string> RegisterAsync(
+        string email,
+        string firstName = "Test",
+        string lastName = "User")
+    {
+        await StartRegistrationAsync(email, firstName, lastName);
         var confirmationCode = GetLatestConfirmationCode(email);
         var confirmResponse = await client.PostAsJsonAsync(
             "/api/auth/confirm-email",
@@ -615,7 +695,11 @@ public class AuthAndBusinessFlowTests : IClassFixture<RendezvousApiFactory>
 
         loginResponse.StatusCode.Should().Be(HttpStatusCode.OK);
         var tokenResponse = await loginResponse.Content.ReadFromJsonAsync<AuthTokenResponse>();
-        return tokenResponse!.AccessToken;
+        tokenResponse!.User.FirstName.Should().Be(firstName.Trim());
+        tokenResponse.User.LastName.Should().Be(lastName.Trim());
+        tokenResponse.User.FullName.Should().Be($"{firstName.Trim()} {lastName.Trim()}");
+
+        return tokenResponse.AccessToken;
     }
 
     private async Task<string> LoginAsync(string email)
@@ -634,12 +718,17 @@ public class AuthAndBusinessFlowTests : IClassFixture<RendezvousApiFactory>
         return tokenResponse!.AccessToken;
     }
 
-    private async Task StartRegistrationAsync(string email)
+    private async Task StartRegistrationAsync(
+        string email,
+        string firstName = "Test",
+        string lastName = "User")
     {
         var response = await client.PostAsJsonAsync(
             "/api/auth/register",
             new
             {
+                firstName,
+                lastName,
                 email,
                 password = "StrongPass123!",
                 confirmPassword = "StrongPass123!"
@@ -659,13 +748,19 @@ public class AuthAndBusinessFlowTests : IClassFixture<RendezvousApiFactory>
         return match.Value;
     }
 
-    private async Task<(string Token, CurrentUserResponse User)> RegisterAndGetCurrentUserAsync(string email)
+    private async Task<(string Token, CurrentUserResponse User)> RegisterAndGetCurrentUserAsync(
+        string email,
+        string firstName = "Test",
+        string lastName = "User")
     {
-        var token = await RegisterAsync(email);
+        var token = await RegisterAsync(email, firstName, lastName);
         client.DefaultRequestHeaders.Authorization = new("Bearer", token);
         var user = await client.GetFromJsonAsync<CurrentUserResponse>("/api/auth/me");
+        user!.FirstName.Should().Be(firstName.Trim());
+        user.LastName.Should().Be(lastName.Trim());
+        user.FullName.Should().Be($"{firstName.Trim()} {lastName.Trim()}");
 
-        return (token, user!);
+        return (token, user);
     }
 
     private async Task GrantOwnerMembershipAsync(Guid userId, string businessName)
@@ -706,6 +801,28 @@ public class AuthAndBusinessFlowTests : IClassFixture<RendezvousApiFactory>
             Role = BusinessMembershipRole.Owner,
             Status = BusinessMembershipStatus.Active,
             CreatedAtUtc = DateTime.UtcNow
+        });
+
+        await dbContext.SaveChangesAsync();
+    }
+
+    private async Task AddAdminRoleAsync(string email)
+    {
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var user = await dbContext.Users.SingleAsync(candidate => candidate.Email == email);
+        var adminRole = await dbContext.Roles.SingleAsync(role => role.Name == ApplicationRoles.Admin);
+
+        if (await dbContext.UserRoles.AnyAsync(userRole =>
+            userRole.UserId == user.Id && userRole.RoleId == adminRole.Id))
+        {
+            return;
+        }
+
+        dbContext.UserRoles.Add(new IdentityUserRole<Guid>
+        {
+            UserId = user.Id,
+            RoleId = adminRole.Id
         });
 
         await dbContext.SaveChangesAsync();
@@ -906,7 +1023,18 @@ public class AuthAndBusinessFlowTests : IClassFixture<RendezvousApiFactory>
         return new DateTimeOffset(utcDateTime, TimeSpan.Zero);
     }
 
-    private sealed record AuthTokenResponse(string AccessToken);
+    private sealed record AuthTokenResponse(
+        string AccessToken,
+        AuthenticatedUserResponse User);
+
+    private sealed record AuthenticatedUserResponse(
+        Guid Id,
+        int PublicNumber,
+        string Email,
+        string FirstName,
+        string LastName,
+        string FullName,
+        IReadOnlyList<string> Roles);
 
     private sealed record EmailAvailabilityResponse(bool IsAvailable);
 
@@ -923,6 +1051,10 @@ public class AuthAndBusinessFlowTests : IClassFixture<RendezvousApiFactory>
     private sealed record AvailableStaffResponse(Guid StaffMemberId);
 
     private sealed record AppointmentRequestResponse(Guid Id, string Status);
+
+    private sealed record OwnerAppointmentRequestListResponse(
+        Guid Id,
+        string CustomerFullName);
 
     private sealed record AvailabilityExceptionResponse(
         Guid Id,
@@ -967,6 +1099,30 @@ public class AuthAndBusinessFlowTests : IClassFixture<RendezvousApiFactory>
         Guid Id,
         int PublicNumber,
         string Email,
+        string FirstName,
+        string LastName,
+        string FullName,
+        IReadOnlyList<string> Roles,
+        IReadOnlyList<BusinessMembershipResponse> BusinessMemberships);
+
+    private sealed record AdminUserSummaryResponse(
+        Guid Id,
+        int PublicNumber,
+        string Email,
+        string FirstName,
+        string LastName,
+        string FullName,
+        bool IsSuspended,
+        IReadOnlyList<string> Roles);
+
+    private sealed record AdminUserDetailResponse(
+        Guid Id,
+        int PublicNumber,
+        string Email,
+        string FirstName,
+        string LastName,
+        string FullName,
+        bool IsSuspended,
         IReadOnlyList<string> Roles,
         IReadOnlyList<BusinessMembershipResponse> BusinessMemberships);
 

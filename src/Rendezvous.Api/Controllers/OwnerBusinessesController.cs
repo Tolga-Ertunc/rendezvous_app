@@ -85,12 +85,13 @@ public class OwnerBusinessesController : ControllerBase
             return Forbid();
         }
 
-        var business = businessProvisioningService.CreateOwnedBusiness(
+        var business = await businessProvisioningService.CreateOwnedBusinessAsync(
             userId.Value,
             request.Name,
             request.Type,
             request.OwnerStaffDisplayName ?? string.Empty,
-            BusinessStatus.PendingApproval);
+            BusinessStatus.PendingApproval,
+            cancellationToken);
 
         await dbContext.SaveChangesAsync(cancellationToken);
 

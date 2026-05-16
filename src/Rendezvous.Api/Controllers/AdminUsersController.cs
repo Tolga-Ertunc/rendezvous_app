@@ -40,7 +40,12 @@ public class AdminUsersController : ControllerBase
             var normalizedSearch = search.Trim().ToLower();
             query = query.Where(user =>
                 (user.Email != null && user.Email.ToLower().Contains(normalizedSearch))
-                || user.PublicNumber.ToString().Contains(normalizedSearch));
+                || user.PublicNumber.ToString().Contains(normalizedSearch)
+                || (user.FirstName != null && user.FirstName.ToLower().Contains(normalizedSearch))
+                || (user.LastName != null && user.LastName.ToLower().Contains(normalizedSearch))
+                || ((user.FirstName ?? string.Empty) + " " + (user.LastName ?? string.Empty))
+                    .ToLower()
+                    .Contains(normalizedSearch));
         }
 
         var users = await query
@@ -50,6 +55,8 @@ public class AdminUsersController : ControllerBase
                 user.Id,
                 user.PublicNumber,
                 Email = user.Email ?? string.Empty,
+                FirstName = user.FirstName ?? string.Empty,
+                LastName = user.LastName ?? string.Empty,
                 user.LockoutEnd
             })
             .ToListAsync(cancellationToken);
@@ -62,6 +69,9 @@ public class AdminUsersController : ControllerBase
                 user.Id,
                 user.PublicNumber,
                 user.Email,
+                user.FirstName,
+                user.LastName,
+                UserNames.FormatFullName(user.FirstName, user.LastName),
                 IsSuspended(user.LockoutEnd),
                 roles.GetValueOrDefault(user.Id, [])))
             .ToList();
@@ -80,6 +90,8 @@ public class AdminUsersController : ControllerBase
                 candidate.Id,
                 candidate.PublicNumber,
                 Email = candidate.Email ?? string.Empty,
+                FirstName = candidate.FirstName ?? string.Empty,
+                LastName = candidate.LastName ?? string.Empty,
                 candidate.LockoutEnd
             })
             .SingleOrDefaultAsync(cancellationToken);
@@ -120,6 +132,9 @@ public class AdminUsersController : ControllerBase
             user.Id,
             user.PublicNumber,
             user.Email,
+            user.FirstName,
+            user.LastName,
+            UserNames.FormatFullName(user.FirstName, user.LastName),
             IsSuspended(user.LockoutEnd),
             roles.GetValueOrDefault(user.Id, []),
             memberships);
@@ -217,11 +232,18 @@ public class AdminUsersController : ControllerBase
         AdminBusinessMembershipMutationRequest request,
         CancellationToken cancellationToken)
     {
-        var userExists = await dbContext.Users
+        var user = await dbContext.Users
             .AsNoTracking()
-            .AnyAsync(user => user.Id == userId, cancellationToken);
+            .Where(candidate => candidate.Id == userId)
+            .Select(candidate => new
+            {
+                candidate.Id,
+                candidate.FirstName,
+                candidate.LastName
+            })
+            .SingleOrDefaultAsync(cancellationToken);
 
-        if (!userExists)
+        if (user is null)
         {
             return NotFound();
         }
@@ -270,12 +292,16 @@ public class AdminUsersController : ControllerBase
 
             if (!hasStaffProfile)
             {
+                var defaultStaffDisplayName = UserNames.FormatFullName(user.FirstName, user.LastName);
+
                 dbContext.StaffMembers.Add(new StaffMember
                 {
                     BusinessId = request.BusinessId,
                     UserId = userId,
                     DisplayName = string.IsNullOrWhiteSpace(request.StaffDisplayName)
-                        ? "Employee"
+                        ? string.IsNullOrWhiteSpace(defaultStaffDisplayName)
+                            ? "Employee"
+                            : defaultStaffDisplayName
                         : request.StaffDisplayName.Trim(),
                     IsActive = request.Status == BusinessMembershipStatus.Active
                 });
@@ -380,6 +406,9 @@ public sealed record AdminUserSummaryResponse(
     Guid Id,
     int PublicNumber,
     string Email,
+    string FirstName,
+    string LastName,
+    string FullName,
     bool IsSuspended,
     IReadOnlyList<string> Roles);
 
@@ -387,6 +416,9 @@ public sealed record AdminUserDetailResponse(
     Guid Id,
     int PublicNumber,
     string Email,
+    string FirstName,
+    string LastName,
+    string FullName,
     bool IsSuspended,
     IReadOnlyList<string> Roles,
     IReadOnlyList<AdminUserBusinessMembershipResponse> BusinessMemberships);

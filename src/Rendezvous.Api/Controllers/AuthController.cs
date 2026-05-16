@@ -62,11 +62,22 @@ public class AuthController : ControllerBase
         RegisterRequest request,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(request.Email)
+        if (string.IsNullOrWhiteSpace(request.FirstName)
+            || string.IsNullOrWhiteSpace(request.LastName)
+            || string.IsNullOrWhiteSpace(request.Email)
             || string.IsNullOrWhiteSpace(request.Password)
             || string.IsNullOrWhiteSpace(request.ConfirmPassword))
         {
-            return BadRequest(new { message = "Email and password are required." });
+            return BadRequest(new { message = "First name, last name, email, and password are required." });
+        }
+
+        if (!UserNames.IsValidNamePart(request.FirstName)
+            || !UserNames.IsValidNamePart(request.LastName))
+        {
+            return BadRequest(new
+            {
+                message = "First name and last name must be 1 to 100 characters and use valid name characters."
+            });
         }
 
         if (request.Password != request.ConfirmPassword)
@@ -75,11 +86,15 @@ public class AuthController : ControllerBase
         }
 
         var email = request.Email.Trim();
+        var firstName = UserNames.Normalize(request.FirstName);
+        var lastName = UserNames.Normalize(request.LastName);
 
         try
         {
             var result = await emailConfirmationService.StartAsync(
                 email,
+                firstName,
+                lastName,
                 request.Password,
                 cancellationToken);
 
@@ -318,6 +333,9 @@ public class AuthController : ControllerBase
             user.Id,
             user.PublicNumber,
             user.Email ?? string.Empty,
+            user.FirstName ?? string.Empty,
+            user.LastName ?? string.Empty,
+            UserNames.FormatFullName(user.FirstName, user.LastName),
             roles.OrderBy(role => role).ToList(),
             memberships);
     }
@@ -362,6 +380,9 @@ public class AuthController : ControllerBase
             user.Id,
             user.PublicNumber,
             user.Email ?? string.Empty,
+            user.FirstName ?? string.Empty,
+            user.LastName ?? string.Empty,
+            UserNames.FormatFullName(user.FirstName, user.LastName),
             roles.OrderBy(role => role).ToList());
 
         return new AuthTokenResponse(
@@ -405,6 +426,8 @@ public sealed record LoginRequest(
     string Password);
 
 public sealed record RegisterRequest(
+    string FirstName,
+    string LastName,
     string Email,
     string Password,
     string ConfirmPassword);
@@ -438,12 +461,18 @@ public sealed record AuthenticatedUserResponse(
     Guid Id,
     int PublicNumber,
     string Email,
+    string FirstName,
+    string LastName,
+    string FullName,
     IReadOnlyList<string> Roles);
 
 public sealed record CurrentUserResponse(
     Guid Id,
     int PublicNumber,
     string Email,
+    string FirstName,
+    string LastName,
+    string FullName,
     IReadOnlyList<string> Roles,
     IReadOnlyList<CurrentUserBusinessMembershipResponse> BusinessMemberships);
 

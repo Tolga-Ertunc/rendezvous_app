@@ -118,11 +118,24 @@ public class AdminBusinessesController : ControllerBase
         var owner = await dbContext.Users
             .AsNoTracking()
             .Where(user => user.Id == business.OwnerUserId)
-            .Select(user => new AdminBusinessOwnerResponse(
+            .Select(user => new
+            {
                 user.Id,
                 user.PublicNumber,
-                user.Email ?? string.Empty))
+                Email = user.Email ?? string.Empty,
+                FirstName = user.FirstName ?? string.Empty,
+                LastName = user.LastName ?? string.Empty
+            })
             .SingleOrDefaultAsync(cancellationToken);
+        var ownerResponse = owner is null
+            ? null
+            : new AdminBusinessOwnerResponse(
+                owner.Id,
+                owner.PublicNumber,
+                owner.Email,
+                owner.FirstName,
+                owner.LastName,
+                UserNames.FormatFullName(owner.FirstName, owner.LastName));
 
         var appointmentCount = await dbContext.Appointments
             .AsNoTracking()
@@ -134,7 +147,7 @@ public class AdminBusinessesController : ControllerBase
             business.Type.ToString(),
             business.Status.ToString(),
             business.TimeZoneId,
-            owner,
+            ownerResponse,
             services.Count,
             staffMembers.Count,
             appointmentCount,
@@ -211,7 +224,10 @@ public sealed record AdminBusinessDetailResponse(
 public sealed record AdminBusinessOwnerResponse(
     Guid Id,
     int PublicNumber,
-    string Email);
+    string Email,
+    string FirstName,
+    string LastName,
+    string FullName);
 
 public sealed record AdminBusinessServiceResponse(
     Guid Id,

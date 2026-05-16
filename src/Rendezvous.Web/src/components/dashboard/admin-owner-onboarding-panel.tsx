@@ -149,7 +149,10 @@ export function AdminOwnerOnboardingPanel() {
                     <dl className="mt-3 grid gap-2 text-sm text-muted-foreground sm:grid-cols-2">
                       <div>
                         <dt>Requester</dt>
-                        <dd className="break-all font-medium text-foreground">
+                        <dd className="font-medium text-foreground">
+                          {request.requesterFullName || "Name not set"}
+                        </dd>
+                        <dd className="break-all text-xs">
                           {request.requesterEmail}
                         </dd>
                       </div>

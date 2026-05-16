@@ -5,6 +5,9 @@ export type AuthenticatedUser = {
   id: string
   publicNumber: number
   email: string
+  firstName: string
+  lastName: string
+  fullName: string
   roles: string[]
 }
 
@@ -87,6 +90,9 @@ export type BusinessDetail = OwnerBusiness & {
     id: string
     publicNumber: number
     email: string
+    firstName: string
+    lastName: string
+    fullName: string
   } | null
   serviceCount?: number
   staffCount?: number
@@ -129,7 +135,7 @@ export type OwnerAppointmentRequest = {
   endsAtUtc: string
   serviceName: string
   staffDisplayName: string
-  customerPublicNumber: number
+  customerFullName: string
   priceAmount: number
   currencyCode: string
 }
@@ -171,7 +177,7 @@ export type EmployeeAppointment = {
   businessName: string
   serviceName: string
   staffDisplayName: string
-  customerPublicNumber: number
+  customerFullName: string
   priceAmount: number
   currencyCode: string
 }
@@ -183,7 +189,7 @@ export type OwnerAppointment = {
   endsAtUtc: string
   serviceName: string
   staffDisplayName: string
-  customerPublicNumber: number
+  customerFullName: string
   priceAmount: number
   currencyCode: string
 }
@@ -309,6 +315,9 @@ export type AdminUser = {
   id: string
   publicNumber: number
   email: string
+  firstName: string
+  lastName: string
+  fullName: string
   isSuspended: boolean
   roles: string[]
 }
@@ -333,6 +342,9 @@ export type OwnerOnboardingRequest = {
 export type AdminOwnerOnboardingRequest = OwnerOnboardingRequest & {
   requesterEmail: string
   requesterPublicNumber: number
+  requesterFirstName: string
+  requesterLastName: string
+  requesterFullName: string
 }
 
 export type NotificationItem = {
@@ -363,13 +375,21 @@ export async function login(email: string, password: string) {
 }
 
 export async function register(
+  firstName: string,
+  lastName: string,
   email: string,
   password: string,
   confirmPassword: string
 ) {
   return apiRequest<PendingEmailRegistration>("/auth/register", {
     method: "POST",
-    body: JSON.stringify({ email, password, confirmPassword }),
+    body: JSON.stringify({
+      firstName,
+      lastName,
+      email,
+      password,
+      confirmPassword,
+    }),
     skipAuthRefresh: true,
   })
 }

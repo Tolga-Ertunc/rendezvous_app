@@ -11,6 +11,12 @@ public class ApplicationUserConfiguration : IEntityTypeConfiguration<Application
         builder.Property(user => user.PublicNumber)
             .IsRequired();
 
+        builder.Property(user => user.FirstName)
+            .HasMaxLength(UserNames.MaxNameLength);
+
+        builder.Property(user => user.LastName)
+            .HasMaxLength(UserNames.MaxNameLength);
+
         builder.HasIndex(user => user.PublicNumber)
             .IsUnique();
 

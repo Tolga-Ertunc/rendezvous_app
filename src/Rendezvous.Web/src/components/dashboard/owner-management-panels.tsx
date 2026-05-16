@@ -1232,7 +1232,7 @@ export function OwnerAppointmentsPanel({ businessId }: { businessId: string }) {
                   <div className="grid gap-1 text-sm text-muted-foreground sm:grid-cols-2">
                     <p>{formatAppointmentTime(appointment.startsAtUtc)}</p>
                     <p>Staff: {appointment.staffDisplayName}</p>
-                    <p>Customer: {appointment.customerPublicNumber}</p>
+                    <p>Customer: {appointment.customerFullName || "Name not set"}</p>
                     <p>
                       Price: {appointment.priceAmount}{" "}
                       {appointment.currencyCode}

@@ -43,6 +43,8 @@ public class EmailConfirmationService
 
     public async Task<PendingEmailRegistrationResult> StartAsync(
         string email,
+        string firstName,
+        string lastName,
         string password,
         CancellationToken cancellationToken)
     {
@@ -53,7 +55,14 @@ public class EmailConfirmationService
             throw new DuplicateEmailException();
         }
 
-        var passwordValidation = await ValidatePasswordAsync(email, password);
+        var normalizedFirstName = UserNames.Normalize(firstName);
+        var normalizedLastName = UserNames.Normalize(lastName);
+
+        var passwordValidation = await ValidatePasswordAsync(
+            email,
+            normalizedFirstName,
+            normalizedLastName,
+            password);
         if (!passwordValidation.Succeeded)
         {
             throw new InvalidRegistrationException(passwordValidation.Errors);
@@ -74,7 +83,7 @@ public class EmailConfirmationService
 
         var code = GenerateCode();
         var codeHash = HashCode(normalizedEmail, code);
-        var tempUser = CreateUser(email);
+        var tempUser = CreateUser(email, normalizedFirstName, normalizedLastName);
         var passwordHash = passwordHasher.HashPassword(tempUser, password);
 
         if (pendingRegistration is null)
@@ -83,6 +92,8 @@ public class EmailConfirmationService
             {
                 Email = email,
                 NormalizedEmail = normalizedEmail,
+                FirstName = normalizedFirstName,
+                LastName = normalizedLastName,
                 PasswordHash = passwordHash,
                 ConfirmationCodeHash = codeHash,
                 CodeExpiresAtUtc = nowUtc.Add(CodeLifetime),
@@ -95,6 +106,8 @@ public class EmailConfirmationService
         else
         {
             pendingRegistration.Email = email;
+            pendingRegistration.FirstName = normalizedFirstName;
+            pendingRegistration.LastName = normalizedLastName;
             pendingRegistration.PasswordHash = passwordHash;
             pendingRegistration.ConfirmationCodeHash = codeHash;
             pendingRegistration.CodeExpiresAtUtc = nowUtc.Add(CodeLifetime);
@@ -148,7 +161,22 @@ public class EmailConfirmationService
             throw new InvalidConfirmationCodeException();
         }
 
-        var user = CreateUser(pendingRegistration.Email);
+        if (!UserNames.IsValidNamePart(pendingRegistration.FirstName)
+            || !UserNames.IsValidNamePart(pendingRegistration.LastName))
+        {
+            throw new InvalidRegistrationException(
+            [
+                new IdentityError
+                {
+                    Description = "First name and last name are required."
+                }
+            ]);
+        }
+
+        var user = CreateUser(
+            pendingRegistration.Email,
+            UserNames.Normalize(pendingRegistration.FirstName ?? string.Empty),
+            UserNames.Normalize(pendingRegistration.LastName ?? string.Empty));
         user.PublicNumber = await publicNumberGenerator.GenerateAsync(cancellationToken);
         user.EmailConfirmed = true;
         user.PasswordHash = pendingRegistration.PasswordHash;
@@ -214,9 +242,13 @@ public class EmailConfirmationService
         return ToResult(pendingRegistration);
     }
 
-    private async Task<IdentityResult> ValidatePasswordAsync(string email, string password)
+    private async Task<IdentityResult> ValidatePasswordAsync(
+        string email,
+        string firstName,
+        string lastName,
+        string password)
     {
-        var user = CreateUser(email);
+        var user = CreateUser(email, firstName, lastName);
         var errors = new List<IdentityError>();
 
         foreach (var validator in userManager.PasswordValidators)
@@ -267,12 +299,17 @@ public class EmailConfirmationService
             .ToString($"D{CodeLength}", CultureInfo.InvariantCulture);
     }
 
-    private static ApplicationUser CreateUser(string email)
+    private static ApplicationUser CreateUser(
+        string email,
+        string firstName,
+        string lastName)
     {
         return new ApplicationUser
         {
             UserName = email,
-            Email = email
+            Email = email,
+            FirstName = firstName,
+            LastName = lastName
         };
     }
 

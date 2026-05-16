@@ -23,6 +23,12 @@ export function AccountCard({ user }: { user: CurrentUser }) {
       <CardContent className="space-y-5">
         <dl className="grid gap-4 text-sm">
           <div className="space-y-1">
+            <dt className="text-muted-foreground">Name</dt>
+            <dd className="font-medium text-foreground">
+              {user.fullName || "Name not set"}
+            </dd>
+          </div>
+          <div className="space-y-1">
             <dt className="text-muted-foreground">Email</dt>
             <dd className="break-all font-medium text-foreground">
               {user.email}

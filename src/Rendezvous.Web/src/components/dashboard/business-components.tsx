@@ -118,10 +118,10 @@ export function BusinessDetailView({
                 <div className="space-y-1">
                   <dt className="text-muted-foreground">Owner</dt>
                   <dd className="break-all font-medium text-foreground">
-                    {business.owner.email}
+                    {business.owner.fullName || "Name not set"}
                   </dd>
                   <dd className="text-xs text-muted-foreground">
-                    {business.owner.publicNumber}
+                    {business.owner.email} · {business.owner.publicNumber}
                   </dd>
                 </div>
               ) : null}

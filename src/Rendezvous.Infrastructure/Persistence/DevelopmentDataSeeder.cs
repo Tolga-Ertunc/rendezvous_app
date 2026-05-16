@@ -67,6 +67,8 @@ public static class DevelopmentDataSeeder
             "SeedUsers:Admin",
             AdminUserId,
             10000001,
+            "Rendezvous",
+            "Admin",
             AdminRoleId,
             cancellationToken);
         await SeedUserAsync(
@@ -75,6 +77,8 @@ public static class DevelopmentDataSeeder
             "SeedUsers:Customer",
             CustomerUserId,
             10000002,
+            "Demo",
+            "Customer",
             UserRoleId,
             cancellationToken);
         var ownerUserId = await SeedUserAsync(
@@ -83,6 +87,8 @@ public static class DevelopmentDataSeeder
             "SeedUsers:Owner",
             OwnerUserId,
             10000003,
+            "Demo",
+            "Owner",
             UserRoleId,
             cancellationToken);
         var employeeUserId = await SeedUserAsync(
@@ -91,6 +97,8 @@ public static class DevelopmentDataSeeder
             "SeedUsers:Employee",
             EmployeeUserId,
             10000004,
+            "Demo",
+            "Employee",
             UserRoleId,
             cancellationToken,
             fallbackPasswordSectionName: "SeedUsers:Owner");
@@ -706,6 +714,8 @@ public static class DevelopmentDataSeeder
         string sectionName,
         Guid userId,
         int publicNumber,
+        string firstName,
+        string lastName,
         Guid roleId,
         CancellationToken cancellationToken,
         string? fallbackPasswordSectionName = null)
@@ -736,6 +746,8 @@ public static class DevelopmentDataSeeder
                 NormalizedUserName = normalizedEmail,
                 Email = email,
                 NormalizedEmail = normalizedEmail,
+                FirstName = firstName,
+                LastName = lastName,
                 EmailConfirmed = true
             };
 
@@ -744,6 +756,13 @@ public static class DevelopmentDataSeeder
             user.SecurityStamp = Guid.NewGuid().ToString();
 
             dbContext.Users.Add(user);
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+        else if (string.IsNullOrWhiteSpace(user.FirstName) || string.IsNullOrWhiteSpace(user.LastName))
+        {
+            user.FirstName = firstName;
+            user.LastName = lastName;
+
             await dbContext.SaveChangesAsync(cancellationToken);
         }
 

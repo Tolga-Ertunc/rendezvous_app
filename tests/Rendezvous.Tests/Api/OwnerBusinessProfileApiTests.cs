@@ -247,6 +247,8 @@ public class OwnerBusinessProfileApiTests : IClassFixture<RendezvousApiFactory>
             "/api/auth/register",
             new
             {
+                firstName = "Profile",
+                lastName = "Owner",
                 email,
                 password = "StrongPass123!",
                 confirmPassword = "StrongPass123!"

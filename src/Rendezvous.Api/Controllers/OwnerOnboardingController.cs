@@ -86,14 +86,18 @@ public class OwnerOnboardingController : ControllerBase
             return Conflict(new { message = "This account already has a pending owner application." });
         }
 
+        var ownerStaffDisplayName = string.IsNullOrWhiteSpace(request.OwnerStaffDisplayName)
+            ? await GetUserFullNameAsync(userId.Value, cancellationToken)
+            : request.OwnerStaffDisplayName.Trim();
+
         var ownerRequest = new OwnerOnboardingRequest
         {
             RequesterUserId = userId.Value,
             BusinessName = request.BusinessName.Trim(),
             BusinessType = request.BusinessType,
-            OwnerStaffDisplayName = string.IsNullOrWhiteSpace(request.OwnerStaffDisplayName)
+            OwnerStaffDisplayName = string.IsNullOrWhiteSpace(ownerStaffDisplayName)
                 ? request.BusinessName.Trim()
-                : request.OwnerStaffDisplayName.Trim(),
+                : ownerStaffDisplayName,
             Status = OwnerOnboardingRequestStatus.Pending,
             CreatedAtUtc = DateTime.UtcNow
         };
@@ -119,27 +123,50 @@ public class OwnerOnboardingController : ControllerBase
             query = query.Where(request => request.Status == status);
         }
 
-        return await query
+        var requestRows = await query
             .Join(
                 dbContext.Users.AsNoTracking(),
                 request => request.RequesterUserId,
                 user => user.Id,
                 (request, user) => new { request, user })
             .OrderByDescending(row => row.request.CreatedAtUtc)
-            .Select(row => new AdminOwnerOnboardingRequestResponse(
+            .Select(row => new
+            {
                 row.request.Id,
                 row.request.RequesterUserId,
-                row.user.Email ?? string.Empty,
+                RequesterEmail = row.user.Email ?? string.Empty,
                 row.user.PublicNumber,
+                FirstName = row.user.FirstName ?? string.Empty,
+                LastName = row.user.LastName ?? string.Empty,
                 row.request.BusinessName,
-                row.request.BusinessType.ToString(),
+                row.request.BusinessType,
                 row.request.OwnerStaffDisplayName,
-                row.request.Status.ToString(),
+                row.request.Status,
                 row.request.AdminNote,
                 row.request.CreatedBusinessId,
                 row.request.CreatedAtUtc,
-                row.request.ReviewedAtUtc))
+                row.request.ReviewedAtUtc
+            })
             .ToListAsync(cancellationToken);
+
+        return requestRows
+            .Select(row => new AdminOwnerOnboardingRequestResponse(
+                row.Id,
+                row.RequesterUserId,
+                row.RequesterEmail,
+                row.PublicNumber,
+                row.FirstName,
+                row.LastName,
+                UserNames.FormatFullName(row.FirstName, row.LastName),
+                row.BusinessName,
+                row.BusinessType.ToString(),
+                row.OwnerStaffDisplayName,
+                row.Status.ToString(),
+                row.AdminNote,
+                row.CreatedBusinessId,
+                row.CreatedAtUtc,
+                row.ReviewedAtUtc))
+            .ToList();
     }
 
     [Authorize(Roles = ApplicationRoles.Admin)]
@@ -168,12 +195,13 @@ public class OwnerOnboardingController : ControllerBase
             return BadRequest(new { message = "Only pending owner applications can be approved." });
         }
 
-        var business = businessProvisioningService.CreateOwnedBusiness(
+        var business = await businessProvisioningService.CreateOwnedBusinessAsync(
             ownerRequest.RequesterUserId,
             ownerRequest.BusinessName,
             ownerRequest.BusinessType,
             ownerRequest.OwnerStaffDisplayName,
-            BusinessStatus.Approved);
+            BusinessStatus.Approved,
+            cancellationToken);
 
         ownerRequest.Status = OwnerOnboardingRequestStatus.Approved;
         ownerRequest.AdminNote = request.AdminNote;
@@ -251,6 +279,23 @@ public class OwnerOnboardingController : ControllerBase
             request.ReviewedAtUtc);
     }
 
+    private async Task<string> GetUserFullNameAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        var user = await dbContext.Users
+            .AsNoTracking()
+            .Where(candidate => candidate.Id == userId)
+            .Select(candidate => new
+            {
+                candidate.FirstName,
+                candidate.LastName
+            })
+            .SingleOrDefaultAsync(cancellationToken);
+
+        return user is null
+            ? string.Empty
+            : UserNames.FormatFullName(user.FirstName, user.LastName);
+    }
+
     private Guid? GetCurrentUserId()
     {
         var userIdValue = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -285,6 +330,9 @@ public sealed record AdminOwnerOnboardingRequestResponse(
     Guid RequesterUserId,
     string RequesterEmail,
     int RequesterPublicNumber,
+    string RequesterFirstName,
+    string RequesterLastName,
+    string RequesterFullName,
     string BusinessName,
     string BusinessType,
     string OwnerStaffDisplayName,

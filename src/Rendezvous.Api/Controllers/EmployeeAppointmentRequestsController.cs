@@ -215,7 +215,7 @@ public class EmployeeAppointmentRequestsController : ControllerBase
                 row.business.Name,
                 row.service.Name,
                 row.staffMember.DisplayName,
-                row.user.PublicNumber,
+                ((row.user.FirstName ?? string.Empty) + " " + (row.user.LastName ?? string.Empty)).Trim(),
                 row.appointment.PriceAmount,
                 row.appointment.CurrencyCode));
     }
@@ -260,7 +260,7 @@ public sealed record EmployeeAppointmentRequestResponse(
     string BusinessName,
     string ServiceName,
     string StaffDisplayName,
-    int CustomerPublicNumber,
+    string CustomerFullName,
     decimal PriceAmount,
     string CurrencyCode);
 
