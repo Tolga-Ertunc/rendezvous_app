@@ -168,12 +168,6 @@ export function AdminOwnerOnboardingPanel() {
                           {request.businessType}
                         </dd>
                       </div>
-                      <div>
-                        <dt>Owner staff display</dt>
-                        <dd className="font-medium text-foreground">
-                          {request.ownerStaffDisplayName}
-                        </dd>
-                      </div>
                     </dl>
                     {request.adminNote ? (
                       <p className="mt-3 text-sm text-muted-foreground">

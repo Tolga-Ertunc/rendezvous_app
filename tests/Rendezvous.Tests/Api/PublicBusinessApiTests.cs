@@ -5,12 +5,14 @@ using Rendezvous.Domain.Availability;
 using Rendezvous.Domain.Businesses;
 using Rendezvous.Domain.Services;
 using Rendezvous.Domain.Staff;
+using Rendezvous.Infrastructure.Identity;
 using Rendezvous.Infrastructure.Persistence;
 
 namespace Rendezvous.Tests.Api;
 
 public class PublicBusinessApiTests : IClassFixture<RendezvousApiFactory>
 {
+    private static int nextPublicNumber = 910000;
     private readonly RendezvousApiFactory factory;
     private readonly HttpClient client;
 
@@ -82,6 +84,19 @@ public class PublicBusinessApiTests : IClassFixture<RendezvousApiFactory>
         using var scope = factory.Services.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var ownerUserId = Guid.NewGuid();
+        var ownerEmail = $"review-barber-{ownerUserId:N}@example.com";
+        dbContext.Users.Add(new ApplicationUser
+        {
+            Id = ownerUserId,
+            PublicNumber = Interlocked.Increment(ref nextPublicNumber),
+            UserName = ownerEmail,
+            NormalizedUserName = ownerEmail.ToUpperInvariant(),
+            Email = ownerEmail,
+            NormalizedEmail = ownerEmail.ToUpperInvariant(),
+            FirstName = "Review",
+            LastName = "Barber",
+            EmailConfirmed = true
+        });
         var approvedBusiness = new Business
         {
             OwnerUserId = ownerUserId,
@@ -158,7 +173,6 @@ public class PublicBusinessApiTests : IClassFixture<RendezvousApiFactory>
         {
             BusinessId = approvedBusiness.Id,
             UserId = ownerUserId,
-            DisplayName = "Review Barber",
             IsActive = true
         });
         dbContext.BusinessReviews.AddRange(

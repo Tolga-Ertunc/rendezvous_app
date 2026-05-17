@@ -4,6 +4,7 @@ using Rendezvous.Domain.Appointments;
 using Rendezvous.Domain.Availability;
 using Rendezvous.Domain.Businesses;
 using Rendezvous.Api.Services;
+using Rendezvous.Infrastructure.Identity;
 using Rendezvous.Infrastructure.Persistence;
 
 namespace Rendezvous.Api.Controllers;
@@ -93,19 +94,26 @@ public class BookingAvailabilityController : ControllerBase
                     .Where(workingHour => workingHour.DayOfWeek == date.DayOfWeek),
                 staffMember => staffMember.Id,
                 workingHour => workingHour.StaffMemberId,
-                (staffMember, workingHour) => new
+                (staffMember, workingHour) => new { staffMember, workingHour })
+            .Join(
+                dbContext.Users.AsNoTracking(),
+                row => row.staffMember.UserId,
+                user => user.Id,
+                (row, user) => new
                 {
-                    StaffMemberId = staffMember.Id,
-                    staffMember.DisplayName,
-                    workingHour.StartsAt,
-                    workingHour.EndsAt
+                    StaffMemberId = row.staffMember.Id,
+                    FirstName = user.FirstName ?? string.Empty,
+                    LastName = user.LastName ?? string.Empty,
+                    row.workingHour.StartsAt,
+                    row.workingHour.EndsAt
                 })
-            .OrderBy(row => row.DisplayName)
+            .OrderBy(row => row.FirstName)
+            .ThenBy(row => row.LastName)
             .ToListAsync(cancellationToken);
         var staffWorkingRows = staffWorkingQueryRows
             .Select(row => new StaffWorkingRow(
                 row.StaffMemberId,
-                row.DisplayName,
+                UserNames.FormatFullName(row.FirstName, row.LastName),
                 row.StartsAt,
                 row.EndsAt))
             .ToList();

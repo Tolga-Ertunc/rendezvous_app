@@ -19,10 +19,6 @@ public class BusinessInvitationConfiguration : IEntityTypeConfiguration<Business
             .HasMaxLength(128)
             .IsRequired();
 
-        builder.Property(invitation => invitation.StaffDisplayName)
-            .HasMaxLength(200)
-            .IsRequired();
-
         builder.Property(invitation => invitation.Role)
             .IsRequired();
 

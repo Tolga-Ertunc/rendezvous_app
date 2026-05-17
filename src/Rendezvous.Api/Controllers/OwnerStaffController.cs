@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Rendezvous.Domain.Businesses;
-using Rendezvous.Domain.Staff;
+using Rendezvous.Infrastructure.Identity;
 using Rendezvous.Infrastructure.Persistence;
 
 namespace Rendezvous.Api.Controllers;
@@ -18,47 +18,6 @@ public class OwnerStaffController : ControllerBase
     public OwnerStaffController(AppDbContext dbContext)
     {
         this.dbContext = dbContext;
-    }
-
-    [HttpPut("{staffMemberId:guid}")]
-    public async Task<ActionResult<OwnerStaffMutationResponse>> Update(
-        Guid businessId,
-        Guid staffMemberId,
-        OwnerStaffRequest request,
-        CancellationToken cancellationToken)
-    {
-        var userId = GetCurrentUserId();
-        if (userId is null)
-        {
-            return Unauthorized();
-        }
-
-        if (!await HasActiveOwnerMembershipAsync(businessId, userId.Value, cancellationToken))
-        {
-            return NotFound();
-        }
-
-        if (string.IsNullOrWhiteSpace(request.DisplayName))
-        {
-            return BadRequest(new { message = "Staff display name is required." });
-        }
-
-        var staffMember = await dbContext.StaffMembers
-            .SingleOrDefaultAsync(
-                candidate => candidate.Id == staffMemberId && candidate.BusinessId == businessId,
-                cancellationToken);
-
-        if (staffMember is null)
-        {
-            return NotFound();
-        }
-
-        staffMember.DisplayName = request.DisplayName.Trim();
-        staffMember.IsActive = request.IsActive;
-
-        await dbContext.SaveChangesAsync(cancellationToken);
-
-        return Map(staffMember);
     }
 
     [HttpPost("{staffMemberId:guid}/activate")]
@@ -109,7 +68,7 @@ public class OwnerStaffController : ControllerBase
         staffMember.IsActive = isActive;
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        return Map(staffMember);
+        return await MapAsync(staffMember.Id, cancellationToken);
     }
 
     private Task<bool> HasActiveOwnerMembershipAsync(
@@ -128,12 +87,32 @@ public class OwnerStaffController : ControllerBase
                 cancellationToken);
     }
 
-    private static OwnerStaffMutationResponse Map(StaffMember staffMember)
+    private async Task<OwnerStaffMutationResponse> MapAsync(
+        Guid staffMemberId,
+        CancellationToken cancellationToken)
     {
+        var row = await dbContext.StaffMembers
+            .AsNoTracking()
+            .Where(staffMember => staffMember.Id == staffMemberId)
+            .Join(
+                dbContext.Users.AsNoTracking(),
+                staffMember => staffMember.UserId,
+                user => user.Id,
+                (staffMember, user) => new
+                {
+                    staffMember.Id,
+                    staffMember.IsActive,
+                    Email = user.Email ?? string.Empty,
+                    FirstName = user.FirstName ?? string.Empty,
+                    LastName = user.LastName ?? string.Empty
+                })
+            .SingleAsync(cancellationToken);
+
         return new OwnerStaffMutationResponse(
-            staffMember.Id,
-            staffMember.DisplayName,
-            staffMember.IsActive);
+            row.Id,
+            UserNames.FormatFullName(row.FirstName, row.LastName),
+            row.Email,
+            row.IsActive);
     }
 
     private Guid? GetCurrentUserId()
@@ -146,11 +125,8 @@ public class OwnerStaffController : ControllerBase
     }
 }
 
-public sealed record OwnerStaffRequest(
-    string DisplayName,
-    bool IsActive);
-
 public sealed record OwnerStaffMutationResponse(
     Guid Id,
     string DisplayName,
+    string Email,
     bool IsActive);

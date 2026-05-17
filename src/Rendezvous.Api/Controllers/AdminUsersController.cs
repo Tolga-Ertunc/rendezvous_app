@@ -292,17 +292,10 @@ public class AdminUsersController : ControllerBase
 
             if (!hasStaffProfile)
             {
-                var defaultStaffDisplayName = UserNames.FormatFullName(user.FirstName, user.LastName);
-
                 dbContext.StaffMembers.Add(new StaffMember
                 {
                     BusinessId = request.BusinessId,
                     UserId = userId,
-                    DisplayName = string.IsNullOrWhiteSpace(request.StaffDisplayName)
-                        ? string.IsNullOrWhiteSpace(defaultStaffDisplayName)
-                            ? "Employee"
-                            : defaultStaffDisplayName
-                        : request.StaffDisplayName.Trim(),
                     IsActive = request.Status == BusinessMembershipStatus.Active
                 });
             }
@@ -434,5 +427,4 @@ public sealed record AdminUserRoleMutationRequest(string RoleName);
 public sealed record AdminBusinessMembershipMutationRequest(
     Guid BusinessId,
     BusinessMembershipRole Role,
-    BusinessMembershipStatus Status,
-    string? StaffDisplayName);
+    BusinessMembershipStatus Status);

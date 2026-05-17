@@ -15,10 +15,6 @@ public class OwnerOnboardingRequestConfiguration : IEntityTypeConfiguration<Owne
             .HasMaxLength(200)
             .IsRequired();
 
-        builder.Property(request => request.OwnerStaffDisplayName)
-            .HasMaxLength(200)
-            .IsRequired();
-
         builder.Property(request => request.AdminNote)
             .HasMaxLength(500);
 

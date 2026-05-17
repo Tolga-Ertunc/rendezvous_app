@@ -56,7 +56,6 @@ import {
   updateOwnerBusinessWorkingHours,
   updateOwnerBusinessProfile,
   updateOwnerService,
-  updateOwnerStaff,
   updateOwnerStaffWorkingHours,
   uploadOwnerBusinessPhoto,
 } from "@/lib/auth-api"
@@ -853,29 +852,9 @@ export function OwnerStaffPanel({
   business: BusinessDetail
   onChanged: () => Promise<void>
 }) {
-  const [drafts, setDrafts] = useState<Record<string, string>>({})
   const [actingId, setActingId] = useState("")
   const [message, setMessage] = useState("")
   const [error, setError] = useState("")
-
-  async function handleUpdate(staff: BusinessStaffMember) {
-    setActingId(staff.id)
-    setMessage("")
-    setError("")
-
-    try {
-      await updateOwnerStaff(business.id, staff.id, {
-        displayName: drafts[staff.id] ?? staff.displayName,
-        isActive: staff.isActive,
-      })
-      setMessage("Staff member updated.")
-      await onChanged()
-    } catch {
-      setError("Staff member could not be updated.")
-    } finally {
-      setActingId("")
-    }
-  }
 
   async function handleToggle(staff: BusinessStaffMember) {
     setActingId(staff.id)
@@ -905,8 +884,8 @@ export function OwnerStaffPanel({
           <CardTitle>Manage staff</CardTitle>
         </div>
         <CardDescription>
-          Update staff display names and active state. Invitations are a later
-          workflow.
+          Staff names come from each account profile. You can manage active
+          state here.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -915,30 +894,22 @@ export function OwnerStaffPanel({
           {business.staffMembers.map((staff) => (
             <div
               key={staff.id}
-              className="grid gap-3 rounded-lg border border-border bg-background p-3 md:grid-cols-[minmax(0,1fr)_110px_auto] md:items-end"
+              className="grid gap-3 rounded-lg border border-border bg-background p-3 md:grid-cols-[minmax(0,1fr)_110px_auto] md:items-center"
             >
-              <Field label="Display name">
-                <Input
-                  value={drafts[staff.id] ?? staff.displayName}
-                  onChange={(event) =>
-                    setDrafts({ ...drafts, [staff.id]: event.target.value })
-                  }
-                />
-              </Field>
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium text-foreground">
+                  {staff.displayName || "Name not set"}
+                </p>
+                <p className="truncate text-xs text-muted-foreground">
+                  {staff.email}
+                </p>
+              </div>
               <div>
                 <Badge variant={staff.isActive ? "default" : "outline"}>
                   {staff.isActive ? "Active" : "Inactive"}
                 </Badge>
               </div>
               <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  disabled={actingId === staff.id}
-                  onClick={() => handleUpdate(staff)}
-                >
-                  Save
-                </Button>
                 <Button
                   type="button"
                   size="sm"

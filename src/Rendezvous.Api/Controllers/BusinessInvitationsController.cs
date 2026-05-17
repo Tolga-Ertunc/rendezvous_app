@@ -112,13 +112,11 @@ public class BusinessInvitationsController : ControllerBase
             {
                 BusinessId = invitation.BusinessId,
                 UserId = user.Id,
-                DisplayName = invitation.StaffDisplayName,
                 IsActive = true
             });
         }
         else
         {
-            staffMember.DisplayName = invitation.StaffDisplayName;
             staffMember.IsActive = true;
         }
 

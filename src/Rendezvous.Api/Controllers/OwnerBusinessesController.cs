@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Rendezvous.Api.Services;
 using Rendezvous.Domain.Businesses;
+using Rendezvous.Infrastructure.Identity;
 using Rendezvous.Infrastructure.Persistence;
 
 namespace Rendezvous.Api.Controllers;
@@ -89,7 +90,6 @@ public class OwnerBusinessesController : ControllerBase
             userId.Value,
             request.Name,
             request.Type,
-            request.OwnerStaffDisplayName ?? string.Empty,
             BusinessStatus.PendingApproval,
             cancellationToken);
 
@@ -98,6 +98,18 @@ public class OwnerBusinessesController : ControllerBase
         var staffMember = await dbContext.StaffMembers
             .AsNoTracking()
             .Where(candidate => candidate.BusinessId == business.Id && candidate.UserId == userId.Value)
+            .Join(
+                dbContext.Users.AsNoTracking(),
+                staff => staff.UserId,
+                user => user.Id,
+                (staff, user) => new
+                {
+                    staff.Id,
+                    staff.IsActive,
+                    Email = user.Email ?? string.Empty,
+                    FirstName = user.FirstName ?? string.Empty,
+                    LastName = user.LastName ?? string.Empty
+                })
             .SingleAsync(cancellationToken);
         var serviceCategories = await dbContext.BusinessServiceCategories
             .AsNoTracking()
@@ -135,7 +147,8 @@ public class OwnerBusinessesController : ControllerBase
             [
                 new OwnerBusinessStaffMemberResponse(
                     staffMember.Id,
-                    staffMember.DisplayName,
+                    UserNames.FormatFullName(staffMember.FirstName, staffMember.LastName),
+                    staffMember.Email,
                     staffMember.IsActive)
             ],
             [],
@@ -218,12 +231,29 @@ public class OwnerBusinessesController : ControllerBase
         var staffMembers = await dbContext.StaffMembers
             .AsNoTracking()
             .Where(staffMember => staffMember.BusinessId == businessId)
-            .OrderBy(staffMember => staffMember.DisplayName)
+            .Join(
+                dbContext.Users.AsNoTracking(),
+                staffMember => staffMember.UserId,
+                user => user.Id,
+                (staffMember, user) => new
+                {
+                    staffMember.Id,
+                    staffMember.IsActive,
+                    Email = user.Email ?? string.Empty,
+                    FirstName = user.FirstName ?? string.Empty,
+                    LastName = user.LastName ?? string.Empty
+                })
+            .OrderBy(row => row.FirstName)
+            .ThenBy(row => row.LastName)
+            .ThenBy(row => row.Email)
+            .ToListAsync(cancellationToken);
+        var staffMemberResponses = staffMembers
             .Select(staffMember => new OwnerBusinessStaffMemberResponse(
                 staffMember.Id,
-                staffMember.DisplayName,
+                UserNames.FormatFullName(staffMember.FirstName, staffMember.LastName),
+                staffMember.Email,
                 staffMember.IsActive))
-            .ToListAsync(cancellationToken);
+            .ToList();
 
         var photos = await dbContext.BusinessPhotos
             .AsNoTracking()
@@ -278,7 +308,7 @@ public class OwnerBusinessesController : ControllerBase
             business.IsEnvironmentallyFriendly,
             serviceCategories,
             services,
-            staffMembers,
+            staffMemberResponses,
             photos,
             reviewSummary,
             reviews);
@@ -443,8 +473,7 @@ public class OwnerBusinessesController : ControllerBase
 
 public sealed record CreateOwnerBusinessRequest(
     string Name,
-    BusinessType Type,
-    string? OwnerStaffDisplayName);
+    BusinessType Type);
 
 public sealed record OwnerBusinessSummaryResponse(
     Guid Id,
@@ -492,6 +521,7 @@ public sealed record OwnerBusinessServiceResponse(
 public sealed record OwnerBusinessStaffMemberResponse(
     Guid Id,
     string DisplayName,
+    string Email,
     bool IsActive);
 
 public sealed record OwnerBusinessProfileRequest(

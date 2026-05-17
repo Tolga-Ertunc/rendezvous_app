@@ -211,13 +211,18 @@ public class EmployeeAvailabilityExceptionsController : ControllerBase
                     && membership.UserId == userId
                     && membership.Role == BusinessMembershipRole.Employee
                     && membership.Status == BusinessMembershipStatus.Active))
+            .Join(
+                dbContext.Users.AsNoTracking(),
+                row => row.staffMember.UserId,
+                user => user.Id,
+                (row, staffUser) => new { row.exception, row.staffMember, staffUser })
             .OrderBy(row => row.exception.Date)
             .ThenBy(row => row.exception.StartsAt)
             .Select(row => new AvailabilityExceptionResponse(
                 row.exception.Id,
                 row.exception.BusinessId,
                 row.exception.StaffMemberId,
-                row.staffMember.DisplayName,
+                ((row.staffUser.FirstName ?? string.Empty) + " " + (row.staffUser.LastName ?? string.Empty)).Trim(),
                 row.exception.Type.ToString(),
                 row.exception.Date,
                 row.exception.IsFullDay,

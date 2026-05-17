@@ -31,7 +31,6 @@ import type { OwnerOnboardingRequest } from "@/lib/auth-api"
 export function OwnerOnboardingRequestPanel() {
   const [requests, setRequests] = useState<OwnerOnboardingRequest[]>([])
   const [businessName, setBusinessName] = useState("")
-  const [ownerStaffDisplayName, setOwnerStaffDisplayName] = useState("")
   const [businessType, setBusinessType] = useState("1")
   const [message, setMessage] = useState("")
   const [error, setError] = useState("")
@@ -61,10 +60,8 @@ export function OwnerOnboardingRequestPanel() {
       await createOwnerOnboardingRequest({
         businessName,
         businessType: Number(businessType),
-        ownerStaffDisplayName: ownerStaffDisplayName || undefined,
       })
       setBusinessName("")
-      setOwnerStaffDisplayName("")
       setMessage("Application submitted.")
       await loadRequests()
     } catch {
@@ -90,28 +87,15 @@ export function OwnerOnboardingRequestPanel() {
         </CardHeader>
         <CardContent>
           <form className="grid gap-4" onSubmit={handleSubmit}>
-            <div className="grid gap-3 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="owner-business-name">Business name</Label>
-                <Input
-                  id="owner-business-name"
-                  value={businessName}
-                  onChange={(event) => setBusinessName(event.target.value)}
-                  placeholder="Neighborhood Barber"
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="owner-staff-display">Owner staff display name</Label>
-                <Input
-                  id="owner-staff-display"
-                  value={ownerStaffDisplayName}
-                  onChange={(event) =>
-                    setOwnerStaffDisplayName(event.target.value)
-                  }
-                  placeholder="Optional"
-                />
-              </div>
+            <div className="space-y-2">
+              <Label htmlFor="owner-business-name">Business name</Label>
+              <Input
+                id="owner-business-name"
+                value={businessName}
+                onChange={(event) => setBusinessName(event.target.value)}
+                placeholder="Neighborhood Barber"
+                required
+              />
             </div>
             <div className="space-y-2">
               <Label>Business type</Label>

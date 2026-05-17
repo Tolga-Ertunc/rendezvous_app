@@ -49,7 +49,6 @@ public class OwnerBusinessInvitationsController : ControllerBase
             .Select(invitation => new OwnerBusinessInvitationResponse(
                 invitation.Id,
                 invitation.Email,
-                invitation.StaffDisplayName,
                 invitation.Role.ToString(),
                 invitation.Status.ToString(),
                 invitation.CreatedAtUtc,
@@ -76,10 +75,9 @@ public class OwnerBusinessInvitationsController : ControllerBase
             return NotFound();
         }
 
-        if (string.IsNullOrWhiteSpace(request.Email)
-            || string.IsNullOrWhiteSpace(request.StaffDisplayName))
+        if (string.IsNullOrWhiteSpace(request.Email))
         {
-            return BadRequest(new { message = "Email and staff display name are required." });
+            return BadRequest(new { message = "Email is required." });
         }
 
         var normalizedEmail = request.Email.Trim().ToLowerInvariant();
@@ -104,7 +102,6 @@ public class OwnerBusinessInvitationsController : ControllerBase
             CreatedByUserId = userId.Value,
             Email = normalizedEmail,
             TokenHash = invitationTokenService.HashToken(token),
-            StaffDisplayName = request.StaffDisplayName.Trim(),
             Role = BusinessMembershipRole.Employee,
             Status = BusinessInvitationStatus.Pending,
             CreatedAtUtc = DateTime.UtcNow,
@@ -119,7 +116,6 @@ public class OwnerBusinessInvitationsController : ControllerBase
             new OwnerBusinessInvitationResponse(
                 invitation.Id,
                 invitation.Email,
-                invitation.StaffDisplayName,
                 invitation.Role.ToString(),
                 invitation.Status.ToString(),
                 invitation.CreatedAtUtc,
@@ -175,14 +171,11 @@ public class OwnerBusinessInvitationsController : ControllerBase
     }
 }
 
-public sealed record CreateBusinessInvitationRequest(
-    string Email,
-    string StaffDisplayName);
+public sealed record CreateBusinessInvitationRequest(string Email);
 
 public sealed record OwnerBusinessInvitationResponse(
     Guid Id,
     string Email,
-    string StaffDisplayName,
     string Role,
     string Status,
     DateTime CreatedAtUtc,

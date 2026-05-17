@@ -48,7 +48,6 @@ public class OwnerOnboardingController : ControllerBase
                 request.RequesterUserId,
                 request.BusinessName,
                 request.BusinessType.ToString(),
-                request.OwnerStaffDisplayName,
                 request.Status.ToString(),
                 request.AdminNote,
                 request.CreatedBusinessId,
@@ -86,18 +85,11 @@ public class OwnerOnboardingController : ControllerBase
             return Conflict(new { message = "This account already has a pending owner application." });
         }
 
-        var ownerStaffDisplayName = string.IsNullOrWhiteSpace(request.OwnerStaffDisplayName)
-            ? await GetUserFullNameAsync(userId.Value, cancellationToken)
-            : request.OwnerStaffDisplayName.Trim();
-
         var ownerRequest = new OwnerOnboardingRequest
         {
             RequesterUserId = userId.Value,
             BusinessName = request.BusinessName.Trim(),
             BusinessType = request.BusinessType,
-            OwnerStaffDisplayName = string.IsNullOrWhiteSpace(ownerStaffDisplayName)
-                ? request.BusinessName.Trim()
-                : ownerStaffDisplayName,
             Status = OwnerOnboardingRequestStatus.Pending,
             CreatedAtUtc = DateTime.UtcNow
         };
@@ -140,7 +132,6 @@ public class OwnerOnboardingController : ControllerBase
                 LastName = row.user.LastName ?? string.Empty,
                 row.request.BusinessName,
                 row.request.BusinessType,
-                row.request.OwnerStaffDisplayName,
                 row.request.Status,
                 row.request.AdminNote,
                 row.request.CreatedBusinessId,
@@ -160,7 +151,6 @@ public class OwnerOnboardingController : ControllerBase
                 UserNames.FormatFullName(row.FirstName, row.LastName),
                 row.BusinessName,
                 row.BusinessType.ToString(),
-                row.OwnerStaffDisplayName,
                 row.Status.ToString(),
                 row.AdminNote,
                 row.CreatedBusinessId,
@@ -199,7 +189,6 @@ public class OwnerOnboardingController : ControllerBase
             ownerRequest.RequesterUserId,
             ownerRequest.BusinessName,
             ownerRequest.BusinessType,
-            ownerRequest.OwnerStaffDisplayName,
             BusinessStatus.Approved,
             cancellationToken);
 
@@ -271,29 +260,11 @@ public class OwnerOnboardingController : ControllerBase
             request.RequesterUserId,
             request.BusinessName,
             request.BusinessType.ToString(),
-            request.OwnerStaffDisplayName,
             request.Status.ToString(),
             request.AdminNote,
             request.CreatedBusinessId,
             request.CreatedAtUtc,
             request.ReviewedAtUtc);
-    }
-
-    private async Task<string> GetUserFullNameAsync(Guid userId, CancellationToken cancellationToken)
-    {
-        var user = await dbContext.Users
-            .AsNoTracking()
-            .Where(candidate => candidate.Id == userId)
-            .Select(candidate => new
-            {
-                candidate.FirstName,
-                candidate.LastName
-            })
-            .SingleOrDefaultAsync(cancellationToken);
-
-        return user is null
-            ? string.Empty
-            : UserNames.FormatFullName(user.FirstName, user.LastName);
     }
 
     private Guid? GetCurrentUserId()
@@ -308,8 +279,7 @@ public class OwnerOnboardingController : ControllerBase
 
 public sealed record CreateOwnerOnboardingRequest(
     string BusinessName,
-    BusinessType BusinessType,
-    string? OwnerStaffDisplayName);
+    BusinessType BusinessType);
 
 public sealed record ReviewOwnerOnboardingRequest(string? AdminNote);
 
@@ -318,7 +288,6 @@ public sealed record OwnerOnboardingRequestResponse(
     Guid RequesterUserId,
     string BusinessName,
     string BusinessType,
-    string OwnerStaffDisplayName,
     string Status,
     string? AdminNote,
     Guid? CreatedBusinessId,
@@ -335,7 +304,6 @@ public sealed record AdminOwnerOnboardingRequestResponse(
     string RequesterFullName,
     string BusinessName,
     string BusinessType,
-    string OwnerStaffDisplayName,
     string Status,
     string? AdminNote,
     Guid? CreatedBusinessId,

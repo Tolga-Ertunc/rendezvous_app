@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Rendezvous.Domain.Appointments;
 using Rendezvous.Domain.Businesses;
+using Rendezvous.Infrastructure.Identity;
 using Rendezvous.Infrastructure.Persistence;
 
 namespace Rendezvous.Api.Controllers;
@@ -56,9 +57,14 @@ public class OwnerAppointmentsController : ControllerBase
                 (row, staffMember) => new { row.appointment, row.service, staffMember })
             .Join(
                 dbContext.Users.AsNoTracking(),
+                row => row.staffMember.UserId,
+                user => user.Id,
+                (row, staffUser) => new { row.appointment, row.service, staffUser })
+            .Join(
+                dbContext.Users.AsNoTracking(),
                 row => row.appointment.CustomerUserId,
                 user => user.Id,
-                (row, user) => new { row.appointment, row.service, row.staffMember, user })
+                (row, user) => new { row.appointment, row.service, row.staffUser, user })
             .OrderBy(row => row.appointment.StartsAtUtc)
             .Select(row => new OwnerAppointmentResponse(
                 row.appointment.Id,
@@ -66,7 +72,7 @@ public class OwnerAppointmentsController : ControllerBase
                 row.appointment.StartsAtUtc,
                 row.appointment.EndsAtUtc,
                 row.service.Name,
-                row.staffMember.DisplayName,
+                ((row.staffUser.FirstName ?? string.Empty) + " " + (row.staffUser.LastName ?? string.Empty)).Trim(),
                 ((row.user.FirstName ?? string.Empty) + " " + (row.user.LastName ?? string.Empty)).Trim(),
                 row.appointment.PriceAmount,
                 row.appointment.CurrencyCode))

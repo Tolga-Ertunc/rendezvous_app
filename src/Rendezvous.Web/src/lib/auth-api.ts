@@ -69,6 +69,7 @@ export type BusinessServiceCategory = {
 export type BusinessStaffMember = {
   id: string
   displayName: string
+  email: string
   isActive: boolean
 }
 
@@ -282,21 +283,14 @@ export type OwnerBusinessProfileRequest = {
   isEnvironmentallyFriendly: boolean
 }
 
-export type OwnerStaffRequest = {
-  displayName: string
-  isActive: boolean
-}
-
 export type CreateOwnerBusinessRequest = {
   name: string
   type: number
-  ownerStaffDisplayName?: string
 }
 
 export type OwnerBusinessInvitation = {
   id: string
   email: string
-  staffDisplayName: string
   role: string
   status: string
   createdAtUtc: string
@@ -331,7 +325,6 @@ export type OwnerOnboardingRequest = {
   requesterUserId: string
   businessName: string
   businessType: string
-  ownerStaffDisplayName: string
   status: string
   adminNote: string | null
   createdBusinessId: string | null
@@ -487,7 +480,7 @@ export function getOwnerBusinessInvitations(businessId: string) {
 
 export function createOwnerBusinessInvitation(
   businessId: string,
-  request: { email: string; staffDisplayName: string }
+  request: { email: string }
 ) {
   return apiRequest<OwnerBusinessInvitation>(
     `/owner/businesses/${businessId}/invitations`,
@@ -651,20 +644,6 @@ export function reorderOwnerBusinessPhotos(
     {
       method: "PUT",
       body: JSON.stringify({ photoIds }),
-    }
-  )
-}
-
-export function updateOwnerStaff(
-  businessId: string,
-  staffMemberId: string,
-  request: OwnerStaffRequest
-) {
-  return apiRequest<BusinessStaffMember>(
-    `/owner/businesses/${businessId}/staff/${staffMemberId}`,
-    {
-      method: "PUT",
-      body: JSON.stringify(request),
     }
   )
 }
@@ -926,7 +905,6 @@ export function upsertAdminUserBusinessMembership(
     businessId: string
     role: "Owner" | "Employee"
     status: "Active" | "Suspended"
-    staffDisplayName?: string
   }
 ) {
   return apiRequest<AdminUserDetail>(
@@ -937,7 +915,6 @@ export function upsertAdminUserBusinessMembership(
         businessId: request.businessId,
         role: request.role === "Owner" ? 1 : 2,
         status: request.status === "Active" ? 1 : 2,
-        staffDisplayName: request.staffDisplayName,
       }),
     }
   )
@@ -970,7 +947,6 @@ export function getMyOwnerOnboardingRequests() {
 export function createOwnerOnboardingRequest(request: {
   businessName: string
   businessType: number
-  ownerStaffDisplayName?: string
 }) {
   return apiRequest<OwnerOnboardingRequest>("/owner-onboarding-requests", {
     method: "POST",

@@ -558,8 +558,7 @@ public class AuthAndBusinessFlowTests : IClassFixture<RendezvousApiFactory>
             new
             {
                 name = "Flow Barber",
-                type = 1,
-                ownerStaffDisplayName = "Flow Owner"
+                type = 1
             });
 
         createResponse.StatusCode.Should().Be(HttpStatusCode.Forbidden);
@@ -577,11 +576,15 @@ public class AuthAndBusinessFlowTests : IClassFixture<RendezvousApiFactory>
             new
             {
                 name = "Flow Barber",
-                type = 1,
-                ownerStaffDisplayName = "Flow Owner"
+                type = 1
             });
 
         createResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+        var createdBusiness = await createResponse.Content
+            .ReadFromJsonAsync<OwnerBusinessDetailResponse>();
+        createdBusiness!.StaffMembers.Should().ContainSingle(staffMember =>
+            staffMember.DisplayName == "Test User"
+            && staffMember.Email == "owner-flow@example.com");
 
         var businesses = await client.GetFromJsonAsync<List<OwnerBusinessResponse>>(
             "/api/owner/businesses");
@@ -603,8 +606,7 @@ public class AuthAndBusinessFlowTests : IClassFixture<RendezvousApiFactory>
             new
             {
                 name = "Invite Barber",
-                type = 1,
-                ownerStaffDisplayName = "Invite Owner"
+                type = 1
             });
         var business = await createBusinessResponse.Content
             .ReadFromJsonAsync<OwnerBusinessDetailResponse>();
@@ -613,8 +615,7 @@ public class AuthAndBusinessFlowTests : IClassFixture<RendezvousApiFactory>
             $"/api/owner/businesses/{business!.Id}/invitations",
             new
             {
-                email = "employee-invite@example.com",
-                staffDisplayName = "Invite Employee"
+                email = "employee-invite@example.com"
             });
 
         inviteResponse.StatusCode.Should().Be(HttpStatusCode.Created);
@@ -857,7 +858,6 @@ public class AuthAndBusinessFlowTests : IClassFixture<RendezvousApiFactory>
         {
             BusinessId = business.Id,
             UserId = ownerUserId,
-            DisplayName = "Test Barber",
             IsActive = true
         };
 
@@ -901,7 +901,6 @@ public class AuthAndBusinessFlowTests : IClassFixture<RendezvousApiFactory>
         {
             BusinessId = businessId,
             UserId = userId,
-            DisplayName = displayName,
             IsActive = true
         };
 
@@ -927,7 +926,6 @@ public class AuthAndBusinessFlowTests : IClassFixture<RendezvousApiFactory>
         {
             BusinessId = businessId,
             UserId = employeeUserId,
-            DisplayName = "Employee Barber",
             IsActive = true
         };
 
@@ -1091,7 +1089,14 @@ public class AuthAndBusinessFlowTests : IClassFixture<RendezvousApiFactory>
         string Name,
         string Type,
         string Status,
-        string TimeZoneId);
+        string TimeZoneId,
+        IReadOnlyList<OwnerBusinessStaffMemberResponse> StaffMembers);
+
+    private sealed record OwnerBusinessStaffMemberResponse(
+        Guid Id,
+        string DisplayName,
+        string Email,
+        bool IsActive);
 
     private sealed record OwnerBusinessInvitationResponse(string? AcceptanceToken);
 

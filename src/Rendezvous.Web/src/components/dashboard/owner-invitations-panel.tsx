@@ -31,7 +31,6 @@ export function OwnerInvitationsPanel({
 }: OwnerInvitationsPanelProps) {
   const [invitations, setInvitations] = useState<OwnerBusinessInvitation[]>([])
   const [email, setEmail] = useState("")
-  const [staffDisplayName, setStaffDisplayName] = useState("")
   const [latestToken, setLatestToken] = useState("")
   const [error, setError] = useState("")
   const [isLoading, setIsLoading] = useState(true)
@@ -76,12 +75,10 @@ export function OwnerInvitationsPanel({
     try {
       const invitation = await createOwnerBusinessInvitation(businessId, {
         email,
-        staffDisplayName,
       })
       setInvitations((current) => [invitation, ...current])
       setLatestToken(invitation.acceptanceToken ?? "")
       setEmail("")
-      setStaffDisplayName("")
     } catch (caughtError) {
       if (caughtError instanceof ApiError && caughtError.status === 409) {
         setError("This email already has an active invitation.")
@@ -107,28 +104,16 @@ export function OwnerInvitationsPanel({
       </CardHeader>
       <CardContent className="space-y-5">
         <form className="grid gap-4" onSubmit={handleCreate}>
-          <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-            <div className="space-y-2">
-              <Label htmlFor="invite-email">Employee email</Label>
-              <Input
-                id="invite-email"
-                type="email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                placeholder="employee@example.com"
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="invite-staff-name">Staff display name</Label>
-              <Input
-                id="invite-staff-name"
-                value={staffDisplayName}
-                onChange={(event) => setStaffDisplayName(event.target.value)}
-                placeholder="Employee name"
-                required
-              />
-            </div>
+          <div className="space-y-2">
+            <Label htmlFor="invite-email">Employee email</Label>
+            <Input
+              id="invite-email"
+              type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              placeholder="employee@example.com"
+              required
+            />
           </div>
 
           {error ? (
@@ -169,9 +154,6 @@ export function OwnerInvitationsPanel({
                   <div className="min-w-0 space-y-1">
                     <p className="break-all text-sm font-medium text-foreground">
                       {invitation.email}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {invitation.staffDisplayName}
                     </p>
                     <p className="text-xs text-muted-foreground">
                       Expires {formatDate(invitation.expiresAtUtc)}

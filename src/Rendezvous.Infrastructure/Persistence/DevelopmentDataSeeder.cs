@@ -460,7 +460,6 @@ public static class DevelopmentDataSeeder
                 Id = OwnerStaffMemberId,
                 BusinessId = BusinessId,
                 UserId = ownerUserId,
-                DisplayName = "Demo Barber",
                 IsActive = true
             });
 
@@ -468,9 +467,8 @@ public static class DevelopmentDataSeeder
             return;
         }
 
-        if (staffMember.DisplayName != "Demo Barber" || !staffMember.IsActive)
+        if (!staffMember.IsActive)
         {
-            staffMember.DisplayName = "Demo Barber";
             staffMember.IsActive = true;
 
             await dbContext.SaveChangesAsync(cancellationToken);
@@ -542,7 +540,6 @@ public static class DevelopmentDataSeeder
                 Id = EmployeeStaffMemberId,
                 BusinessId = BusinessId,
                 UserId = employeeUserId,
-                DisplayName = "Demo Employee",
                 IsActive = true
             });
 
@@ -550,9 +547,8 @@ public static class DevelopmentDataSeeder
             return;
         }
 
-        if (staffMember.DisplayName != "Demo Employee" || !staffMember.IsActive)
+        if (!staffMember.IsActive)
         {
-            staffMember.DisplayName = "Demo Employee";
             staffMember.IsActive = true;
 
             await dbContext.SaveChangesAsync(cancellationToken);

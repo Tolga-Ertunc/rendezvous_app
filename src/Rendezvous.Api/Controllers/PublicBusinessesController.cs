@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Rendezvous.Domain.Businesses;
+using Rendezvous.Infrastructure.Identity;
 using Rendezvous.Infrastructure.Persistence;
 
 namespace Rendezvous.Api.Controllers;
@@ -243,11 +244,24 @@ public class PublicBusinessesController : ControllerBase
         var staffMembers = await dbContext.StaffMembers
             .AsNoTracking()
             .Where(staffMember => staffMember.BusinessId == id && staffMember.IsActive)
-            .OrderBy(staffMember => staffMember.DisplayName)
+            .Join(
+                dbContext.Users.AsNoTracking(),
+                staffMember => staffMember.UserId,
+                user => user.Id,
+                (staffMember, user) => new
+                {
+                    staffMember.Id,
+                    FirstName = user.FirstName ?? string.Empty,
+                    LastName = user.LastName ?? string.Empty
+                })
+            .OrderBy(row => row.FirstName)
+            .ThenBy(row => row.LastName)
+            .ToListAsync(cancellationToken);
+        var staffMemberResponses = staffMembers
             .Select(staffMember => new PublicBusinessStaffMemberResponse(
                 staffMember.Id,
-                staffMember.DisplayName))
-            .ToListAsync(cancellationToken);
+                UserNames.FormatFullName(staffMember.FirstName, staffMember.LastName)))
+            .ToList();
 
         var photos = await dbContext.BusinessPhotos
             .AsNoTracking()
@@ -292,7 +306,7 @@ public class PublicBusinessesController : ControllerBase
             business.Description,
             services,
             workingHours,
-            staffMembers,
+            staffMemberResponses,
             photos,
             reviewSummary,
             reviews,

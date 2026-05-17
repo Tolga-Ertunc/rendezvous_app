@@ -169,10 +169,10 @@ export function BusinessDetailView({
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium text-foreground">
-                        {staffMember.displayName}
+                        {staffMember.displayName || "Name not set"}
                       </p>
                       <p className="mt-1 break-all text-xs text-muted-foreground">
-                        {staffMember.id}
+                        {staffMember.email}
                       </p>
                     </div>
                     <Badge variant={staffMember.isActive ? "default" : "outline"}>

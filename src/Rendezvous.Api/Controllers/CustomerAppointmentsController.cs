@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Rendezvous.Api.Services;
+using Rendezvous.Infrastructure.Identity;
 using Rendezvous.Infrastructure.Persistence;
 
 namespace Rendezvous.Api.Controllers;
@@ -53,6 +54,11 @@ public class CustomerAppointmentsController : ControllerBase
                 row => row.appointment.StaffMemberId,
                 staffMember => staffMember.Id,
                 (row, staffMember) => new { row.appointment, row.business, row.service, staffMember })
+            .Join(
+                dbContext.Users.AsNoTracking(),
+                row => row.staffMember.UserId,
+                user => user.Id,
+                (row, staffUser) => new { row.appointment, row.business, row.service, staffUser })
             .OrderBy(row => row.appointment.StartsAtUtc)
             .Select(row => new CustomerAppointmentResponse(
                 row.appointment.Id,
@@ -61,7 +67,7 @@ public class CustomerAppointmentsController : ControllerBase
                 row.appointment.EndsAtUtc,
                 row.business.Name,
                 row.service.Name,
-                row.staffMember.DisplayName,
+                ((row.staffUser.FirstName ?? string.Empty) + " " + (row.staffUser.LastName ?? string.Empty)).Trim(),
                 row.appointment.PriceAmount,
                 row.appointment.CurrencyCode))
             .ToListAsync(cancellationToken);

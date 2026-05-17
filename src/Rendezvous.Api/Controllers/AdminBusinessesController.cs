@@ -108,12 +108,29 @@ public class AdminBusinessesController : ControllerBase
         var staffMembers = await dbContext.StaffMembers
             .AsNoTracking()
             .Where(staffMember => staffMember.BusinessId == businessId)
-            .OrderBy(staffMember => staffMember.DisplayName)
+            .Join(
+                dbContext.Users.AsNoTracking(),
+                staffMember => staffMember.UserId,
+                user => user.Id,
+                (staffMember, user) => new
+                {
+                    staffMember.Id,
+                    staffMember.IsActive,
+                    Email = user.Email ?? string.Empty,
+                    FirstName = user.FirstName ?? string.Empty,
+                    LastName = user.LastName ?? string.Empty
+                })
+            .OrderBy(row => row.FirstName)
+            .ThenBy(row => row.LastName)
+            .ThenBy(row => row.Email)
+            .ToListAsync(cancellationToken);
+        var staffMemberResponses = staffMembers
             .Select(staffMember => new AdminBusinessStaffMemberResponse(
                 staffMember.Id,
-                staffMember.DisplayName,
+                UserNames.FormatFullName(staffMember.FirstName, staffMember.LastName),
+                staffMember.Email,
                 staffMember.IsActive))
-            .ToListAsync(cancellationToken);
+            .ToList();
 
         var owner = await dbContext.Users
             .AsNoTracking()
@@ -149,10 +166,10 @@ public class AdminBusinessesController : ControllerBase
             business.TimeZoneId,
             ownerResponse,
             services.Count,
-            staffMembers.Count,
+            staffMemberResponses.Count,
             appointmentCount,
             services,
-            staffMembers);
+            staffMemberResponses);
     }
 
     [HttpPost("{businessId:guid}/approve")]
@@ -242,6 +259,7 @@ public sealed record AdminBusinessServiceResponse(
 public sealed record AdminBusinessStaffMemberResponse(
     Guid Id,
     string DisplayName,
+    string Email,
     bool IsActive);
 
 public sealed record AdminBusinessStatusResponse(

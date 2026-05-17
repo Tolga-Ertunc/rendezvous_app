@@ -12,10 +12,6 @@ public class StaffMemberConfiguration : IEntityTypeConfiguration<StaffMember>
     {
         builder.HasKey(staffMember => staffMember.Id);
 
-        builder.Property(staffMember => staffMember.DisplayName)
-            .HasMaxLength(200)
-            .IsRequired();
-
         builder.HasOne<Business>()
             .WithMany()
             .HasForeignKey(staffMember => staffMember.BusinessId)

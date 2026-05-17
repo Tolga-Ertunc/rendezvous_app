@@ -250,11 +250,21 @@ public class OwnerAvailabilityExceptionsController : ControllerBase
                 (exception, staffMembers) => new { exception, staffMembers })
             .SelectMany(
                 row => row.staffMembers.DefaultIfEmpty(),
-                (row, staffMember) => new AvailabilityExceptionResponse(
+                (row, staffMember) => new { row.exception, staffMember })
+            .GroupJoin(
+                dbContext.Users.AsNoTracking(),
+                row => row.staffMember == null ? Guid.Empty : row.staffMember.UserId,
+                user => user.Id,
+                (row, users) => new { row.exception, row.staffMember, users })
+            .SelectMany(
+                row => row.users.DefaultIfEmpty(),
+                (row, staffUser) => new AvailabilityExceptionResponse(
                     row.exception.Id,
                     row.exception.BusinessId,
                     row.exception.StaffMemberId,
-                    staffMember == null ? null : staffMember.DisplayName,
+                    staffUser == null
+                        ? null
+                        : ((staffUser.FirstName ?? string.Empty) + " " + (staffUser.LastName ?? string.Empty)).Trim(),
                     row.exception.Type.ToString(),
                     row.exception.Date,
                     row.exception.IsFullDay,

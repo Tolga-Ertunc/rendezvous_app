@@ -35,7 +35,6 @@ export function OwnerOnboardingPanel({
   onCreated,
 }: OwnerOnboardingPanelProps) {
   const [name, setName] = useState("")
-  const [staffDisplayName, setStaffDisplayName] = useState("")
   const [message, setMessage] = useState("")
   const [error, setError] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -50,10 +49,8 @@ export function OwnerOnboardingPanel({
       const business = await createOwnerBusiness({
         name,
         type: 1,
-        ownerStaffDisplayName: staffDisplayName || undefined,
       })
       setName("")
-      setStaffDisplayName("")
       setMessage("Business created as pending approval.")
       onCreated(business)
     } catch (caughtError) {
@@ -82,26 +79,15 @@ export function OwnerOnboardingPanel({
       </CardHeader>
       <CardContent>
         <form className="grid gap-4" onSubmit={handleSubmit}>
-          <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-            <div className="space-y-2">
-              <Label htmlFor="business-name">Business name</Label>
-              <Input
-                id="business-name"
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-                placeholder="Neighborhood Barber"
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="owner-staff-name">Owner staff display name</Label>
-              <Input
-                id="owner-staff-name"
-                value={staffDisplayName}
-                onChange={(event) => setStaffDisplayName(event.target.value)}
-                placeholder="Optional"
-              />
-            </div>
+          <div className="space-y-2">
+            <Label htmlFor="business-name">Business name</Label>
+            <Input
+              id="business-name"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              placeholder="Neighborhood Barber"
+              required
+            />
           </div>
 
           <div className="space-y-2">

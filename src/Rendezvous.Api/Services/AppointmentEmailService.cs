@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Rendezvous.Api.Email;
+using Rendezvous.Infrastructure.Identity;
 using Rendezvous.Infrastructure.Persistence;
 
 namespace Rendezvous.Api.Services;
@@ -44,9 +45,14 @@ public class AppointmentEmailService
                 (row, staffMember) => new { row.appointment, row.business, row.service, staffMember })
             .Join(
                 dbContext.Users.AsNoTracking(),
+                row => row.staffMember.UserId,
+                user => user.Id,
+                (row, staffUser) => new { row.appointment, row.business, row.service, staffUser })
+            .Join(
+                dbContext.Users.AsNoTracking(),
                 row => row.appointment.CustomerUserId,
                 user => user.Id,
-                (row, user) => new { row.appointment, row.business, row.service, row.staffMember, user })
+                (row, user) => new { row.appointment, row.business, row.service, row.staffUser, user })
             .SingleOrDefaultAsync(cancellationToken);
 
         if (row?.user.Email is null || !row.user.EmailConfirmed)
@@ -57,12 +63,13 @@ public class AppointmentEmailService
         var startsAtLocal = ConvertToBusinessTime(
             row.appointment.StartsAtUtc,
             row.business.TimeZoneId);
+        var staffDisplayName = UserNames.FormatFullName(row.staffUser.FirstName, row.staffUser.LastName);
         var body = $"""
             Your appointment is approved.
 
             Business: {row.business.Name}
             Service: {row.service.Name}
-            Staff: {row.staffMember.DisplayName}
+            Staff: {staffDisplayName}
             Date/time: {startsAtLocal:yyyy-MM-dd HH:mm} ({row.business.TimeZoneId})
             Price: {row.appointment.PriceAmount:0.##} {row.appointment.CurrencyCode}
 

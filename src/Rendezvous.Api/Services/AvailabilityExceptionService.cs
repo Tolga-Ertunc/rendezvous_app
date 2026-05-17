@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Rendezvous.Domain.Appointments;
 using Rendezvous.Domain.Availability;
+using Rendezvous.Infrastructure.Identity;
 using Rendezvous.Infrastructure.Persistence;
 
 namespace Rendezvous.Api.Services;
@@ -69,7 +70,7 @@ public class AvailabilityExceptionService
         var timeZone = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
         var range = ToUtcRange(draft, timeZone);
 
-        return await dbContext.Appointments
+        var conflicts = await dbContext.Appointments
             .AsNoTracking()
             .Where(appointment =>
                 appointment.BusinessId == draft.BusinessId
@@ -87,15 +88,33 @@ public class AvailabilityExceptionService
                 dbContext.StaffMembers.AsNoTracking(),
                 row => row.appointment.StaffMemberId,
                 staffMember => staffMember.Id,
-                (row, staffMember) => new AvailabilityExceptionAppointmentConflict(
+                (row, staffMember) => new { row.appointment, row.service, staffMember })
+            .Join(
+                dbContext.Users.AsNoTracking(),
+                row => row.staffMember.UserId,
+                user => user.Id,
+                (row, user) => new
+                {
                     row.appointment.Id,
-                    row.appointment.Status.ToString(),
+                    Status = row.appointment.Status.ToString(),
                     row.appointment.StartsAtUtc,
                     row.appointment.EndsAtUtc,
-                    row.service.Name,
-                    staffMember.DisplayName))
+                    ServiceName = row.service.Name,
+                    FirstName = user.FirstName ?? string.Empty,
+                    LastName = user.LastName ?? string.Empty
+                })
             .OrderBy(conflict => conflict.StartsAtUtc)
             .ToListAsync(cancellationToken);
+
+        return conflicts
+            .Select(conflict => new AvailabilityExceptionAppointmentConflict(
+                conflict.Id,
+                conflict.Status,
+                conflict.StartsAtUtc,
+                conflict.EndsAtUtc,
+                conflict.ServiceName,
+                UserNames.FormatFullName(conflict.FirstName, conflict.LastName)))
+            .ToList();
     }
 
     public async Task<int> CancelConflictingAppointmentsAsync(

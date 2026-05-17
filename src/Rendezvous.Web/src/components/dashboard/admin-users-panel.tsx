@@ -56,7 +56,6 @@ export function AdminUsersPanel() {
     useState<BusinessMembershipRoleValue>("Employee")
   const [membershipStatus, setMembershipStatus] =
     useState<BusinessMembershipStatusValue>("Active")
-  const [staffDisplayName, setStaffDisplayName] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [isMutating, setIsMutating] = useState(false)
   const [hasLoaded, setHasLoaded] = useState(false)
@@ -147,7 +146,6 @@ export function AdminUsersPanel() {
         businessId: membershipBusinessId,
         role: membershipRole,
         status: membershipStatus,
-        staffDisplayName: staffDisplayName || undefined,
       })
     )
   }
@@ -417,13 +415,6 @@ export function AdminUsersPanel() {
                     </SelectContent>
                   </Select>
                 </div>
-                {membershipRole === "Employee" ? (
-                  <Input
-                    value={staffDisplayName}
-                    onChange={(event) => setStaffDisplayName(event.target.value)}
-                    placeholder="Staff display name"
-                  />
-                ) : null}
                 <Button
                   type="button"
                   onClick={handleUpsertMembership}
