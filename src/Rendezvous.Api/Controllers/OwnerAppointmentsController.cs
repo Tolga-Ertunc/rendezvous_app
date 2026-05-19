@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Rendezvous.Api.Services;
 using Rendezvous.Domain.Appointments;
 using Rendezvous.Domain.Businesses;
 using Rendezvous.Infrastructure.Identity;
@@ -15,15 +16,22 @@ namespace Rendezvous.Api.Controllers;
 public class OwnerAppointmentsController : ControllerBase
 {
     private readonly AppDbContext dbContext;
+    private readonly AppointmentNotificationService notificationService;
 
-    public OwnerAppointmentsController(AppDbContext dbContext)
+    public OwnerAppointmentsController(
+        AppDbContext dbContext,
+        AppointmentNotificationService notificationService)
     {
         this.dbContext = dbContext;
+        this.notificationService = notificationService;
     }
 
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<OwnerAppointmentResponse>>> List(
         Guid businessId,
+        [FromQuery] string? status,
+        [FromQuery] DateTimeOffset? fromUtc,
+        [FromQuery] DateTimeOffset? toUtc,
         CancellationToken cancellationToken)
     {
         var userId = GetCurrentUserId();
@@ -38,13 +46,31 @@ public class OwnerAppointmentsController : ControllerBase
         }
 
         var nowUtc = DateTimeOffset.UtcNow;
-
-        return await dbContext.Appointments
+        var hasFilters = !string.IsNullOrWhiteSpace(status) || fromUtc.HasValue || toUtc.HasValue;
+        var appointmentsQuery = dbContext.Appointments
             .AsNoTracking()
-            .Where(appointment =>
-                appointment.BusinessId == businessId
-                && appointment.Status == AppointmentStatus.Approved
-                && appointment.StartsAtUtc >= nowUtc)
+            .Where(appointment => appointment.BusinessId == businessId);
+
+        if (hasFilters)
+        {
+            if (!TryApplyAppointmentFilters(
+                ref appointmentsQuery,
+                status,
+                fromUtc,
+                toUtc,
+                out var errorMessage))
+            {
+                return BadRequest(new { message = errorMessage });
+            }
+        }
+        else
+        {
+            appointmentsQuery = appointmentsQuery.Where(appointment =>
+                appointment.Status == AppointmentStatus.Approved
+                && appointment.StartsAtUtc >= nowUtc);
+        }
+
+        return await appointmentsQuery
             .Join(
                 dbContext.BusinessServices.AsNoTracking(),
                 appointment => appointment.BusinessServiceId,
@@ -111,6 +137,86 @@ public class OwnerAppointmentsController : ControllerBase
             return BadRequest(new { message = "This appointment cannot be cancelled." });
         }
 
+        notificationService.AddCustomerAppointmentCancelled(appointment);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return new OwnerAppointmentDecisionResponse(
+            appointment.Id,
+            appointment.Status.ToString());
+    }
+
+    [HttpPost("{appointmentId:guid}/complete")]
+    public async Task<ActionResult<OwnerAppointmentDecisionResponse>> Complete(
+        Guid businessId,
+        Guid appointmentId,
+        CancellationToken cancellationToken)
+    {
+        var userId = GetCurrentUserId();
+        if (userId is null)
+        {
+            return Unauthorized();
+        }
+
+        if (!await HasActiveOwnerMembershipAsync(businessId, userId.Value, cancellationToken))
+        {
+            return NotFound();
+        }
+
+        var appointment = await dbContext.Appointments
+            .SingleOrDefaultAsync(
+                candidate => candidate.Id == appointmentId && candidate.BusinessId == businessId,
+                cancellationToken);
+
+        if (appointment is null)
+        {
+            return NotFound();
+        }
+
+        if (!appointment.CompleteApprovedAppointment(DateTimeOffset.UtcNow, automatic: false))
+        {
+            return BadRequest(new { message = "This appointment cannot be completed." });
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return new OwnerAppointmentDecisionResponse(
+            appointment.Id,
+            appointment.Status.ToString());
+    }
+
+    [HttpPost("{appointmentId:guid}/no-show")]
+    public async Task<ActionResult<OwnerAppointmentDecisionResponse>> MarkNoShow(
+        Guid businessId,
+        Guid appointmentId,
+        CancellationToken cancellationToken)
+    {
+        var userId = GetCurrentUserId();
+        if (userId is null)
+        {
+            return Unauthorized();
+        }
+
+        if (!await HasActiveOwnerMembershipAsync(businessId, userId.Value, cancellationToken))
+        {
+            return NotFound();
+        }
+
+        var appointment = await dbContext.Appointments
+            .SingleOrDefaultAsync(
+                candidate => candidate.Id == appointmentId && candidate.BusinessId == businessId,
+                cancellationToken);
+
+        if (appointment is null)
+        {
+            return NotFound();
+        }
+
+        if (!appointment.MarkNoShow(DateTimeOffset.UtcNow))
+        {
+            return BadRequest(new { message = "This appointment cannot be marked no-show." });
+        }
+
+        notificationService.AddCustomerAppointmentNoShow(appointment);
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return new OwnerAppointmentDecisionResponse(
@@ -141,6 +247,45 @@ public class OwnerAppointmentsController : ControllerBase
         return Guid.TryParse(userIdValue, out var userId)
             ? userId
             : null;
+    }
+
+    private static bool TryApplyAppointmentFilters(
+        ref IQueryable<Appointment> query,
+        string? status,
+        DateTimeOffset? fromUtc,
+        DateTimeOffset? toUtc,
+        out string errorMessage)
+    {
+        errorMessage = string.Empty;
+
+        if (fromUtc.HasValue && toUtc.HasValue && fromUtc > toUtc)
+        {
+            errorMessage = "fromUtc must be before toUtc.";
+            return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(status))
+        {
+            if (!Enum.TryParse<AppointmentStatus>(status, ignoreCase: true, out var appointmentStatus))
+            {
+                errorMessage = "Invalid appointment status.";
+                return false;
+            }
+
+            query = query.Where(appointment => appointment.Status == appointmentStatus);
+        }
+
+        if (fromUtc.HasValue)
+        {
+            query = query.Where(appointment => appointment.StartsAtUtc >= fromUtc.Value);
+        }
+
+        if (toUtc.HasValue)
+        {
+            query = query.Where(appointment => appointment.StartsAtUtc <= toUtc.Value);
+        }
+
+        return true;
     }
 }
 

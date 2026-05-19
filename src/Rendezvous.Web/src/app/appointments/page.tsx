@@ -7,7 +7,7 @@ export default function AppointmentsPage() {
   return (
     <ProtectedPage
       title="My appointments"
-      description="Review your appointment requests and bookings."
+      description="Review your appointment requests, bookings, and history."
     >
       {() => <CustomerAppointmentsPanel />}
     </ProtectedPage>

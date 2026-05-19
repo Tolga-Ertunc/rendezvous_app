@@ -9,10 +9,14 @@ namespace Rendezvous.Api.Services;
 public class AvailabilityExceptionService
 {
     private readonly AppDbContext dbContext;
+    private readonly AppointmentNotificationService notificationService;
 
-    public AvailabilityExceptionService(AppDbContext dbContext)
+    public AvailabilityExceptionService(
+        AppDbContext dbContext,
+        AppointmentNotificationService notificationService)
     {
         this.dbContext = dbContext;
+        this.notificationService = notificationService;
     }
 
     public async Task<IReadOnlyList<AvailabilityException>> GetExceptionsForAvailabilityAsync(
@@ -138,6 +142,7 @@ public class AvailabilityExceptionService
         foreach (var appointment in appointments)
         {
             appointment.Status = AppointmentStatus.Cancelled;
+            notificationService.AddCustomerAppointmentCancelled(appointment);
         }
 
         return appointments.Count;

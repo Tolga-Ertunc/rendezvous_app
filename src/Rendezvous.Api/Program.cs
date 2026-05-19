@@ -60,16 +60,21 @@ else
     builder.Services.AddScoped<IEmailSender, DisabledEmailSender>();
 }
 builder.Services.AddScoped<AuthTokenService>();
-builder.Services.AddScoped<AppointmentExpirationService>();
+builder.Services.AddScoped<AppointmentLifecycleService>();
 builder.Services.AddScoped<InvitationTokenService>();
 builder.Services.AddScoped<PublicNumberGenerator>();
 builder.Services.AddScoped<AvailabilityExceptionService>();
 builder.Services.AddScoped<BusinessProvisioningService>();
 builder.Services.AddScoped<NotificationWriter>();
+builder.Services.AddScoped<AppointmentNotificationService>();
 builder.Services.AddScoped<EmailConfirmationService>();
 builder.Services.AddScoped<AppointmentEmailService>();
 builder.Services.AddScoped<BusinessPhotoStorageService>();
 builder.Services.AddScoped<ApplicationRoleSeeder>();
+if (!builder.Environment.IsEnvironment("Testing"))
+{
+    builder.Services.AddHostedService<AppointmentLifecycleBackgroundService>();
+}
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>

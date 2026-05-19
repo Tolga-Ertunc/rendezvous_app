@@ -8,6 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Rendezvous.Api.Email;
 using Rendezvous.Domain.Appointments;
 using Rendezvous.Domain.Availability;
+using Rendezvous.Domain.Notifications;
 using Rendezvous.Domain.Services;
 using Rendezvous.Domain.Staff;
 using Rendezvous.Domain.Businesses;
@@ -134,6 +135,237 @@ public class AuthAndBusinessFlowTests : IClassFixture<RendezvousApiFactory>
             message.To == "approval-email-customer@example.com"
             && message.Subject == "Your appointment is approved"
             && message.TextBody.Contains("Approval Email Barber", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Owner_can_complete_and_mark_no_show_for_business_appointment()
+    {
+        var (ownerToken, owner) = await RegisterAndGetCurrentUserAsync("owner-complete-owner@example.com");
+        var setup = await CreateBookableBusinessAsync(owner.Id, "Owner Complete Barber");
+        await AddOwnerMembershipAsync(owner.Id, setup.BusinessId);
+        var (_, customer) = await RegisterAndGetCurrentUserAsync("owner-complete-customer@example.com");
+        var appointmentId = await AddAppointmentAsync(
+            customer.Id,
+            setup,
+            AppointmentStatus.Approved,
+            DateTimeOffset.UtcNow.AddHours(-2),
+            DateTimeOffset.UtcNow.AddHours(-1));
+        client.DefaultRequestHeaders.Authorization = new("Bearer", ownerToken);
+
+        var completeResponse = await client.PostAsync(
+            $"/api/owner/businesses/{setup.BusinessId}/appointments/{appointmentId}/complete",
+            content: null);
+        var completed = await completeResponse.Content.ReadFromJsonAsync<AppointmentDecisionResponse>();
+        var noShowResponse = await client.PostAsync(
+            $"/api/owner/businesses/{setup.BusinessId}/appointments/{appointmentId}/no-show",
+            content: null);
+        var noShow = await noShowResponse.Content.ReadFromJsonAsync<AppointmentDecisionResponse>();
+
+        completeResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        completed!.Status.Should().Be("Completed");
+        noShowResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        noShow!.Status.Should().Be("NoShow");
+
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        (await dbContext.Notifications.AnyAsync(notification =>
+            notification.UserId == customer.Id
+            && notification.Type == NotificationType.AppointmentNoShow))
+            .Should()
+            .BeTrue();
+    }
+
+    [Fact]
+    public async Task Employee_can_manage_only_assigned_appointments()
+    {
+        var (_, owner) = await RegisterAndGetCurrentUserAsync("employee-status-owner@example.com");
+        var setup = await CreateBookableBusinessAsync(owner.Id, "Employee Status Barber");
+        var (assignedEmployeeToken, assignedEmployee) =
+            await RegisterAndGetCurrentUserAsync("employee-status-assigned@example.com");
+        var (_, otherEmployee) = await RegisterAndGetCurrentUserAsync("employee-status-other@example.com");
+        var assignedStaffId = await AddEmployeeAsync(setup.BusinessId, assignedEmployee.Id, setup.LocalDate);
+        await AddEmployeeAsync(setup.BusinessId, otherEmployee.Id, setup.LocalDate);
+        var (_, customer) = await RegisterAndGetCurrentUserAsync("employee-status-customer@example.com");
+        var startedAppointmentId = await AddAppointmentAsync(
+            customer.Id,
+            setup,
+            AppointmentStatus.Approved,
+            DateTimeOffset.UtcNow.AddHours(-2),
+            DateTimeOffset.UtcNow.AddHours(-1),
+            assignedStaffId);
+        var futureAppointmentId = await AddAppointmentAsync(
+            customer.Id,
+            setup,
+            AppointmentStatus.Approved,
+            DateTimeOffset.UtcNow.AddHours(2),
+            DateTimeOffset.UtcNow.AddHours(3),
+            assignedStaffId);
+        var otherEmployeeToken = await LoginAsync("employee-status-other@example.com");
+        client.DefaultRequestHeaders.Authorization = new("Bearer", otherEmployeeToken);
+
+        var otherCompleteResponse = await client.PostAsync(
+            $"/api/employee/appointments/{startedAppointmentId}/complete",
+            content: null);
+        var otherNoShowResponse = await client.PostAsync(
+            $"/api/employee/appointments/{startedAppointmentId}/no-show",
+            content: null);
+        var otherCancelResponse = await client.PostAsync(
+            $"/api/employee/appointments/{futureAppointmentId}/cancel",
+            content: null);
+
+        client.DefaultRequestHeaders.Authorization = new("Bearer", assignedEmployeeToken);
+        var completeResponse = await client.PostAsync(
+            $"/api/employee/appointments/{startedAppointmentId}/complete",
+            content: null);
+        var noShowResponse = await client.PostAsync(
+            $"/api/employee/appointments/{startedAppointmentId}/no-show",
+            content: null);
+        var cancelResponse = await client.PostAsync(
+            $"/api/employee/appointments/{futureAppointmentId}/cancel",
+            content: null);
+
+        otherCompleteResponse.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        otherNoShowResponse.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        otherCancelResponse.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        completeResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        noShowResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        cancelResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task Customer_cancellation_notifies_business_owner_and_assigned_staff()
+    {
+        var (_, owner) = await RegisterAndGetCurrentUserAsync("customer-cancel-owner@example.com");
+        var setup = await CreateBookableBusinessAsync(owner.Id, "Customer Cancel Barber");
+        await AddOwnerMembershipAsync(owner.Id, setup.BusinessId);
+        var (_, employee) = await RegisterAndGetCurrentUserAsync("customer-cancel-employee@example.com");
+        var staffId = await AddEmployeeAsync(setup.BusinessId, employee.Id, setup.LocalDate);
+        var (customerToken, customer) = await RegisterAndGetCurrentUserAsync("customer-cancel-customer@example.com");
+        var appointmentId = await AddAppointmentAsync(
+            customer.Id,
+            setup,
+            AppointmentStatus.Approved,
+            DateTimeOffset.UtcNow.AddHours(2),
+            DateTimeOffset.UtcNow.AddHours(3),
+            staffId);
+        client.DefaultRequestHeaders.Authorization = new("Bearer", customerToken);
+
+        var response = await client.PostAsync($"/api/customer/appointments/{appointmentId}/cancel", content: null);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        (await dbContext.Notifications.AnyAsync(notification =>
+            notification.UserId == owner.Id
+            && notification.Type == NotificationType.AppointmentCancelled
+            && notification.LinkUrl == $"/owner/businesses/{setup.BusinessId}/appointments"))
+            .Should()
+            .BeTrue();
+        (await dbContext.Notifications.AnyAsync(notification =>
+            notification.UserId == employee.Id
+            && notification.Type == NotificationType.AppointmentCancelled
+            && notification.LinkUrl == "/employee/appointments"))
+            .Should()
+            .BeTrue();
+    }
+
+    [Fact]
+    public async Task Customer_appointment_list_processes_due_lifecycle_before_returning_appointments()
+    {
+        var (_, owner) = await RegisterAndGetCurrentUserAsync("customer-list-lifecycle-owner@example.com");
+        var setup = await CreateBookableBusinessAsync(owner.Id, "Customer List Lifecycle Barber");
+        var (customerToken, customer) = await RegisterAndGetCurrentUserAsync("customer-list-lifecycle-customer@example.com");
+        var nowUtc = DateTimeOffset.UtcNow;
+        var appointmentId = await AddAppointmentAsync(
+            customer.Id,
+            setup,
+            AppointmentStatus.Pending,
+            nowUtc.AddMinutes(-10),
+            nowUtc.AddMinutes(20));
+        client.DefaultRequestHeaders.Authorization = new("Bearer", customerToken);
+
+        var appointments = await client.GetFromJsonAsync<IReadOnlyList<AppointmentListResponse>>(
+            "/api/customer/appointments");
+
+        appointments.Should().ContainSingle(appointment =>
+            appointment.Id == appointmentId
+            && appointment.Status == AppointmentStatus.Expired.ToString());
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        (await dbContext.Notifications.AnyAsync(notification =>
+            notification.UserId == customer.Id
+            && notification.Type == NotificationType.AppointmentExpired
+            && notification.LinkUrl == "/appointments"))
+            .Should()
+            .BeTrue();
+    }
+
+    [Fact]
+    public async Task Customer_cancel_processes_due_lifecycle_before_cancelling_pending_appointment()
+    {
+        var (_, owner) = await RegisterAndGetCurrentUserAsync("customer-cancel-lifecycle-owner@example.com");
+        var setup = await CreateBookableBusinessAsync(owner.Id, "Customer Cancel Lifecycle Barber");
+        var (customerToken, customer) = await RegisterAndGetCurrentUserAsync("customer-cancel-lifecycle-customer@example.com");
+        var nowUtc = DateTimeOffset.UtcNow;
+        var appointmentId = await AddAppointmentAsync(
+            customer.Id,
+            setup,
+            AppointmentStatus.Pending,
+            nowUtc.AddMinutes(-10),
+            nowUtc.AddMinutes(20));
+        client.DefaultRequestHeaders.Authorization = new("Bearer", customerToken);
+
+        var response = await client.PostAsync($"/api/customer/appointments/{appointmentId}/cancel", content: null);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var appointmentStatus = await dbContext.Appointments
+            .Where(appointment => appointment.Id == appointmentId)
+            .Select(appointment => appointment.Status)
+            .SingleAsync();
+
+        appointmentStatus.Should().Be(AppointmentStatus.Expired);
+    }
+
+    [Fact]
+    public async Task Appointment_lists_support_filters_while_preserving_default_owner_behavior()
+    {
+        var (ownerToken, owner) = await RegisterAndGetCurrentUserAsync("appointment-filter-owner@example.com");
+        var setup = await CreateBookableBusinessAsync(owner.Id, "Appointment Filter Barber");
+        await AddOwnerMembershipAsync(owner.Id, setup.BusinessId);
+        var (_, customer) = await RegisterAndGetCurrentUserAsync("appointment-filter-customer@example.com");
+        var completedStartsAt = DateTimeOffset.UtcNow.AddDays(-1);
+        var completedId = await AddAppointmentAsync(
+            customer.Id,
+            setup,
+            AppointmentStatus.Completed,
+            completedStartsAt,
+            completedStartsAt.AddMinutes(30));
+        var approvedId = await AddAppointmentAsync(
+            customer.Id,
+            setup,
+            AppointmentStatus.Approved,
+            DateTimeOffset.UtcNow.AddDays(1),
+            DateTimeOffset.UtcNow.AddDays(1).AddMinutes(30));
+        await AddAppointmentAsync(
+            customer.Id,
+            setup,
+            AppointmentStatus.Cancelled,
+            DateTimeOffset.UtcNow.AddDays(-2),
+            DateTimeOffset.UtcNow.AddDays(-2).AddMinutes(30));
+        client.DefaultRequestHeaders.Authorization = new("Bearer", ownerToken);
+
+        var defaultAppointments = await client.GetFromJsonAsync<IReadOnlyList<AppointmentListResponse>>(
+            $"/api/owner/businesses/{setup.BusinessId}/appointments");
+        var fromUtc = Uri.EscapeDataString(DateTimeOffset.UtcNow.AddDays(-2).ToString("O"));
+        var toUtc = Uri.EscapeDataString(DateTimeOffset.UtcNow.ToString("O"));
+        var filteredAppointments = await client.GetFromJsonAsync<IReadOnlyList<AppointmentListResponse>>(
+            $"/api/owner/businesses/{setup.BusinessId}/appointments?status=Completed&fromUtc={fromUtc}&toUtc={toUtc}");
+
+        defaultAppointments.Should().ContainSingle(appointment => appointment.Id == approvedId);
+        defaultAppointments.Should().NotContain(appointment => appointment.Id == completedId);
+        filteredAppointments.Should().ContainSingle(appointment => appointment.Id == completedId);
     }
 
     [Fact]
@@ -951,6 +1183,35 @@ public class AuthAndBusinessFlowTests : IClassFixture<RendezvousApiFactory>
         return staffMember.Id;
     }
 
+    private async Task<Guid> AddAppointmentAsync(
+        Guid customerUserId,
+        BookableBusinessSetup setup,
+        AppointmentStatus status,
+        DateTimeOffset startsAtUtc,
+        DateTimeOffset endsAtUtc,
+        Guid? staffMemberId = null)
+    {
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var appointment = new Appointment
+        {
+            BusinessId = setup.BusinessId,
+            BusinessServiceId = setup.ServiceId,
+            StaffMemberId = staffMemberId ?? setup.StaffMemberId,
+            CustomerUserId = customerUserId,
+            StartsAtUtc = startsAtUtc,
+            EndsAtUtc = endsAtUtc,
+            Status = status,
+            PriceAmount = 500,
+            CurrencyCode = "TRY"
+        };
+
+        dbContext.Appointments.Add(appointment);
+        await dbContext.SaveChangesAsync();
+
+        return appointment.Id;
+    }
+
     private async Task<IReadOnlyList<Guid>> AddAppointmentsAsync(
         Guid customerUserId,
         BookableBusinessSetup setup)
@@ -1049,6 +1310,13 @@ public class AuthAndBusinessFlowTests : IClassFixture<RendezvousApiFactory>
     private sealed record AvailableStaffResponse(Guid StaffMemberId);
 
     private sealed record AppointmentRequestResponse(Guid Id, string Status);
+
+    private sealed record AppointmentDecisionResponse(Guid Id, string Status);
+
+    private sealed record AppointmentListResponse(
+        Guid Id,
+        string Status,
+        DateTimeOffset StartsAtUtc);
 
     private sealed record OwnerAppointmentRequestListResponse(
         Guid Id,

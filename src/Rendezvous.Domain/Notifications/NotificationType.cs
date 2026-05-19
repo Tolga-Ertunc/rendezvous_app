@@ -7,5 +7,8 @@ public enum NotificationType
     AppointmentRequestApproved = 3,
     AppointmentRequestRejected = 4,
     OwnerOnboardingApproved = 5,
-    OwnerOnboardingRejected = 6
+    OwnerOnboardingRejected = 6,
+    AppointmentCancelled = 7,
+    AppointmentExpired = 8,
+    AppointmentNoShow = 9
 }

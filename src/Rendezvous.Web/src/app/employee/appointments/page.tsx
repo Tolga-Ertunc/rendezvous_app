@@ -10,7 +10,7 @@ export default function EmployeeAppointmentsPage() {
   return (
     <ProtectedPage
       title="Employee appointments"
-      description="Review your approved upcoming appointments."
+      description="Review assigned appointments and history."
       authorize={(user) => hasActiveMembership(user, "Employee")}
     >
       {() => <EmployeeApprovedAppointmentsPanel />}

@@ -17,18 +17,18 @@ namespace Rendezvous.Api.Controllers;
 public class EmployeeAppointmentRequestsController : ControllerBase
 {
     private readonly AppDbContext dbContext;
-    private readonly AppointmentExpirationService expirationService;
+    private readonly AppointmentLifecycleService lifecycleService;
     private readonly NotificationWriter notificationWriter;
     private readonly AppointmentEmailService appointmentEmailService;
 
     public EmployeeAppointmentRequestsController(
         AppDbContext dbContext,
-        AppointmentExpirationService expirationService,
+        AppointmentLifecycleService lifecycleService,
         NotificationWriter notificationWriter,
         AppointmentEmailService appointmentEmailService)
     {
         this.dbContext = dbContext;
-        this.expirationService = expirationService;
+        this.lifecycleService = lifecycleService;
         this.notificationWriter = notificationWriter;
         this.appointmentEmailService = appointmentEmailService;
     }
@@ -43,7 +43,7 @@ public class EmployeeAppointmentRequestsController : ControllerBase
             return Unauthorized();
         }
 
-        await expirationService.ExpirePendingAppointmentsAsync(cancellationToken);
+        await lifecycleService.ProcessDueAppointmentsAsync(cancellationToken);
 
         return await GetEmployeeAppointmentRequestsQuery(userId.Value)
             .ToListAsync(cancellationToken);

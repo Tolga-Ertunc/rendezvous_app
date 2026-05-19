@@ -56,7 +56,7 @@ const sectionCopy = {
   staff: ["Staff", "Manage staff display names and active state."],
   hours: ["Working hours", "Manage business and staff working hours."],
   exceptions: ["Scheduling exceptions", "Manage closures, holidays, and leave."],
-  appointments: ["Appointments", "Review requests and approved appointments."],
+  appointments: ["Appointments", "Review requests, appointments, and history."],
 } satisfies Record<OwnerBusinessSection, [string, string]>
 
 export function OwnerBusinessSectionPage({

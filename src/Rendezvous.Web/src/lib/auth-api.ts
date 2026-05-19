@@ -200,6 +200,12 @@ export type AppointmentDecision = {
   status: string
 }
 
+export type AppointmentFilters = {
+  status?: string
+  fromUtc?: string
+  toUtc?: string
+}
+
 export type AdminBusinessStatus = {
   id: string
   status: string
@@ -793,8 +799,9 @@ export function rejectEmployeeAppointmentRequest(appointmentId: string) {
   )
 }
 
-export function getEmployeeAppointments() {
-  return apiRequest<EmployeeAppointment[]>("/employee/appointments")
+export function getEmployeeAppointments(params?: AppointmentFilters) {
+  const query = buildAppointmentQuery(params)
+  return apiRequest<EmployeeAppointment[]>(`/employee/appointments${query}`)
 }
 
 export function cancelEmployeeAppointment(appointmentId: string) {
@@ -837,9 +844,27 @@ export function deleteEmployeeAvailabilityException(exceptionId: string) {
   )
 }
 
-export function getOwnerAppointments(businessId: string) {
+export function completeEmployeeAppointment(appointmentId: string) {
+  return apiRequest<AppointmentDecision>(
+    `/employee/appointments/${appointmentId}/complete`,
+    { method: "POST" }
+  )
+}
+
+export function markEmployeeAppointmentNoShow(appointmentId: string) {
+  return apiRequest<AppointmentDecision>(
+    `/employee/appointments/${appointmentId}/no-show`,
+    { method: "POST" }
+  )
+}
+
+export function getOwnerAppointments(
+  businessId: string,
+  params?: AppointmentFilters
+) {
+  const query = buildAppointmentQuery(params)
   return apiRequest<OwnerAppointment[]>(
-    `/owner/businesses/${businessId}/appointments`
+    `/owner/businesses/${businessId}/appointments${query}`
   )
 }
 
@@ -853,8 +878,29 @@ export function cancelOwnerAppointment(
   )
 }
 
-export function getCustomerAppointments() {
-  return apiRequest<CustomerAppointment[]>("/customer/appointments")
+export function completeOwnerAppointment(
+  businessId: string,
+  appointmentId: string
+) {
+  return apiRequest<AppointmentDecision>(
+    `/owner/businesses/${businessId}/appointments/${appointmentId}/complete`,
+    { method: "POST" }
+  )
+}
+
+export function markOwnerAppointmentNoShow(
+  businessId: string,
+  appointmentId: string
+) {
+  return apiRequest<AppointmentDecision>(
+    `/owner/businesses/${businessId}/appointments/${appointmentId}/no-show`,
+    { method: "POST" }
+  )
+}
+
+export function getCustomerAppointments(params?: AppointmentFilters) {
+  const query = buildAppointmentQuery(params)
+  return apiRequest<CustomerAppointment[]>(`/customer/appointments${query}`)
 }
 
 export function cancelCustomerAppointment(appointmentId: string) {
@@ -1016,4 +1062,12 @@ function buildQuery(params?: Record<string, string | undefined>) {
 
   const query = searchParams.toString()
   return query ? `?${query}` : ""
+}
+
+function buildAppointmentQuery(params?: AppointmentFilters) {
+  return buildQuery({
+    status: params?.status,
+    fromUtc: params?.fromUtc,
+    toUtc: params?.toUtc,
+  })
 }

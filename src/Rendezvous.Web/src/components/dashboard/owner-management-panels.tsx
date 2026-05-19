@@ -7,6 +7,7 @@ import {
   ArrowDown,
   ArrowUp,
   CalendarDays,
+  Check,
   Clock,
   ImageIcon,
   MapPin,
@@ -14,6 +15,7 @@ import {
   Star,
   Trash2,
   Upload,
+  UserX,
   UsersRound,
   X,
 } from "lucide-react"
@@ -43,6 +45,7 @@ import {
   activateOwnerService,
   activateOwnerStaff,
   cancelOwnerAppointment,
+  completeOwnerAppointment,
   createOwnerServiceCategory,
   createOwnerService,
   deactivateOwnerService,
@@ -52,6 +55,7 @@ import {
   getOwnerAppointments,
   getOwnerBusinessWorkingHours,
   getOwnerStaffWorkingHours,
+  markOwnerAppointmentNoShow,
   reorderOwnerBusinessPhotos,
   updateOwnerBusinessWorkingHours,
   updateOwnerBusinessProfile,
@@ -61,6 +65,7 @@ import {
 } from "@/lib/auth-api"
 import { ApiError } from "@/lib/api-client"
 import type {
+  AppointmentFilters,
   BusinessDetail,
   BusinessPhoto,
   BusinessService,
@@ -1109,6 +1114,9 @@ export function OwnerAppointmentsPanel({ businessId }: { businessId: string }) {
   const [appointments, setAppointments] = useState<OwnerAppointment[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [actingId, setActingId] = useState("")
+  const [statusFilter, setStatusFilter] = useState("all")
+  const [fromDate, setFromDate] = useState("")
+  const [toDate, setToDate] = useState("")
   const [message, setMessage] = useState("")
   const [error, setError] = useState("")
 
@@ -1142,15 +1150,39 @@ export function OwnerAppointmentsPanel({ businessId }: { businessId: string }) {
     }
   }, [businessId])
 
-  async function refreshAppointments() {
+  function getFilters(): AppointmentFilters | undefined {
+    return buildAppointmentFilters(statusFilter, fromDate, toDate)
+  }
+
+  async function refreshAppointments(filters = getFilters()) {
     setIsLoading(true)
-    const nextAppointments = await getOwnerAppointments(businessId)
-    setAppointments(nextAppointments)
-    setIsLoading(false)
+    setError("")
+
+    try {
+      const nextAppointments = await getOwnerAppointments(businessId, filters)
+      setAppointments(nextAppointments)
+    } catch {
+      setError("Appointments could not be loaded.")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  async function applyFilters() {
+    setMessage("")
+    await refreshAppointments()
+  }
+
+  async function clearFilters() {
+    setStatusFilter("all")
+    setFromDate("")
+    setToDate("")
+    setMessage("")
+    await refreshAppointments(undefined)
   }
 
   async function handleCancel(appointmentId: string) {
-    setActingId(appointmentId)
+    setActingId(`cancel:${appointmentId}`)
     setMessage("")
     setError("")
 
@@ -1165,26 +1197,103 @@ export function OwnerAppointmentsPanel({ businessId }: { businessId: string }) {
     }
   }
 
+  async function handleComplete(appointmentId: string) {
+    setActingId(`complete:${appointmentId}`)
+    setMessage("")
+    setError("")
+
+    try {
+      await completeOwnerAppointment(businessId, appointmentId)
+      setMessage("Appointment completed.")
+      await refreshAppointments()
+    } catch {
+      setError("Appointment could not be completed.")
+    } finally {
+      setActingId("")
+    }
+  }
+
+  async function handleNoShow(appointmentId: string) {
+    setActingId(`no-show:${appointmentId}`)
+    setMessage("")
+    setError("")
+
+    try {
+      await markOwnerAppointmentNoShow(businessId, appointmentId)
+      setMessage("Appointment marked no-show.")
+      await refreshAppointments()
+    } catch {
+      setError("Appointment could not be marked no-show.")
+    } finally {
+      setActingId("")
+    }
+  }
+
   return (
     <Card>
       <CardHeader>
         <div className="flex items-center gap-2">
           <CalendarDays className="size-4 text-primary" aria-hidden="true" />
-          <CardTitle>Approved appointments</CardTitle>
+          <CardTitle>Appointments</CardTitle>
         </div>
         <CardDescription>
-          Owner can cancel approved appointments until one hour before start.
+          Review upcoming and historical appointments.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <PanelMessages message={message} error={error} />
+        <div className="grid gap-3 rounded-lg border border-border bg-background p-3 md:grid-cols-[180px_1fr_1fr_auto] md:items-end">
+          <Field label="Status" id="owner-appointment-status">
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger id="owner-appointment-status">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {appointmentStatusOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field label="From" id="owner-appointment-from">
+            <Input
+              id="owner-appointment-from"
+              type="date"
+              value={fromDate}
+              onChange={(event) => setFromDate(event.target.value)}
+            />
+          </Field>
+          <Field label="To" id="owner-appointment-to">
+            <Input
+              id="owner-appointment-to"
+              type="date"
+              value={toDate}
+              onChange={(event) => setToDate(event.target.value)}
+            />
+          </Field>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" size="sm" onClick={applyFilters}>
+              Apply
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={clearFilters}
+            >
+              Clear
+            </Button>
+          </div>
+        </div>
         {isLoading ? (
           <p className="text-sm leading-6 text-muted-foreground">
-            Loading approved appointments.
+            Loading appointments.
           </p>
         ) : appointments.length === 0 ? (
           <p className="text-sm leading-6 text-muted-foreground">
-            No approved upcoming appointments.
+            No appointments found.
           </p>
         ) : (
           <div className="grid gap-3">
@@ -1210,16 +1319,13 @@ export function OwnerAppointmentsPanel({ businessId }: { businessId: string }) {
                     </p>
                   </div>
                 </div>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  disabled={actingId === appointment.id}
-                  onClick={() => handleCancel(appointment.id)}
-                >
-                  <X data-icon="inline-start" className="size-4" />
-                  {actingId === appointment.id ? "Cancelling" : "Cancel"}
-                </Button>
+                <AppointmentActionButtons
+                  appointment={appointment}
+                  actingId={actingId}
+                  onCancel={() => handleCancel(appointment.id)}
+                  onComplete={() => handleComplete(appointment.id)}
+                  onNoShow={() => handleNoShow(appointment.id)}
+                />
               </div>
             ))}
           </div>
@@ -1227,6 +1333,129 @@ export function OwnerAppointmentsPanel({ businessId }: { businessId: string }) {
       </CardContent>
     </Card>
   )
+}
+
+const appointmentStatusOptions = [
+  { value: "all", label: "All statuses" },
+  { value: "Pending", label: "Pending" },
+  { value: "Approved", label: "Approved" },
+  { value: "Rejected", label: "Rejected" },
+  { value: "Cancelled", label: "Cancelled" },
+  { value: "Completed", label: "Completed" },
+  { value: "NoShow", label: "No show" },
+  { value: "Expired", label: "Expired" },
+]
+
+function AppointmentActionButtons({
+  appointment,
+  actingId,
+  onCancel,
+  onComplete,
+  onNoShow,
+}: {
+  appointment: OwnerAppointment
+  actingId: string
+  onCancel: () => void
+  onComplete: () => void
+  onNoShow: () => void
+}) {
+  const isActing = actingId.endsWith(appointment.id)
+  const canCancel = canCancelBusinessAppointment(appointment)
+  const canComplete = canCompleteAppointment(appointment)
+  const canNoShow = canMarkAppointmentNoShow(appointment)
+
+  if (!canCancel && !canComplete && !canNoShow) {
+    return null
+  }
+
+  return (
+    <div className="flex flex-wrap gap-2">
+      {canComplete ? (
+        <Button
+          type="button"
+          size="sm"
+          disabled={isActing}
+          onClick={onComplete}
+        >
+          <Check data-icon="inline-start" className="size-4" />
+          {actingId === `complete:${appointment.id}` ? "Completing" : "Complete"}
+        </Button>
+      ) : null}
+      {canNoShow ? (
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={isActing}
+          onClick={onNoShow}
+        >
+          <UserX data-icon="inline-start" className="size-4" />
+          {actingId === `no-show:${appointment.id}` ? "Saving" : "No show"}
+        </Button>
+      ) : null}
+      {canCancel ? (
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={isActing}
+          onClick={onCancel}
+        >
+          <X data-icon="inline-start" className="size-4" />
+          {actingId === `cancel:${appointment.id}` ? "Cancelling" : "Cancel"}
+        </Button>
+      ) : null}
+    </div>
+  )
+}
+
+function buildAppointmentFilters(
+  status: string,
+  fromDate: string,
+  toDate: string
+): AppointmentFilters | undefined {
+  const filters: AppointmentFilters = {}
+
+  if (status !== "all") {
+    filters.status = status
+  }
+
+  if (fromDate) {
+    filters.fromUtc = new Date(`${fromDate}T00:00:00`).toISOString()
+  }
+
+  if (toDate) {
+    filters.toUtc = new Date(`${toDate}T23:59:59.999`).toISOString()
+  }
+
+  return Object.keys(filters).length > 0 ? filters : undefined
+}
+
+function canCancelBusinessAppointment(appointment: OwnerAppointment) {
+  if (appointment.status !== "Approved") {
+    return false
+  }
+
+  return new Date(appointment.startsAtUtc).getTime() - Date.now() >= 60 * 60 * 1000
+}
+
+function canCompleteAppointment(appointment: OwnerAppointment) {
+  return appointment.status === "Approved"
+    && new Date(appointment.startsAtUtc).getTime() <= Date.now()
+}
+
+function canMarkAppointmentNoShow(appointment: OwnerAppointment) {
+  const now = Date.now()
+
+  if (appointment.status === "Approved") {
+    return new Date(appointment.startsAtUtc).getTime() <= now
+  }
+
+  if (appointment.status === "Completed") {
+    return new Date(appointment.endsAtUtc).getTime() + 24 * 60 * 60 * 1000 >= now
+  }
+
+  return false
 }
 
 function WorkingHoursCard({
@@ -1470,14 +1699,16 @@ function PhotoManagerItem({
 
 function Field({
   label,
+  id,
   children,
 }: {
   label: string
+  id?: string
   children: React.ReactNode
 }) {
   return (
     <div className="space-y-2">
-      <Label>{label}</Label>
+      <Label htmlFor={id}>{label}</Label>
       {children}
     </div>
   )
