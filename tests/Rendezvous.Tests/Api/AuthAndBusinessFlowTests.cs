@@ -270,6 +270,245 @@ public class AuthAndBusinessFlowTests : IClassFixture<RendezvousApiFactory>
     }
 
     [Fact]
+    public async Task Customer_can_review_completed_appointment_and_public_business_shows_review()
+    {
+        var (_, owner) = await RegisterAndGetCurrentUserAsync("review-create-owner@example.com");
+        var setup = await CreateBookableBusinessAsync(owner.Id, "Review Create Barber");
+        var (customerToken, customer) = await RegisterAndGetCurrentUserAsync(
+            "review-create-customer@example.com",
+            firstName: "Review",
+            lastName: "Customer");
+        var appointmentId = await AddAppointmentAsync(
+            customer.Id,
+            setup,
+            AppointmentStatus.Completed,
+            DateTimeOffset.UtcNow.AddHours(-2),
+            DateTimeOffset.UtcNow.AddHours(-1));
+        client.DefaultRequestHeaders.Authorization = new("Bearer", customerToken);
+
+        var response = await client.PostAsJsonAsync(
+            $"/api/customer/appointments/{appointmentId}/review",
+            new
+            {
+                rating = 5,
+                comment = "  Excellent service.  "
+            });
+
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        var reviewResponse = await response.Content.ReadFromJsonAsync<CustomerAppointmentReviewResponse>();
+        reviewResponse!.AppointmentId.Should().Be(appointmentId);
+        reviewResponse.BusinessId.Should().Be(setup.BusinessId);
+        reviewResponse.Rating.Should().Be(5);
+        reviewResponse.Comment.Should().Be("Excellent service.");
+
+        var customerAppointments = await client.GetFromJsonAsync<IReadOnlyList<CustomerAppointmentListResponse>>(
+            "/api/customer/appointments?status=Completed");
+        customerAppointments.Should().ContainSingle(appointment =>
+            appointment.Id == appointmentId
+            && appointment.HasReview);
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var review = await dbContext.BusinessReviews.SingleAsync(candidate => candidate.AppointmentId == appointmentId);
+
+            review.BusinessId.Should().Be(setup.BusinessId);
+            review.CustomerName.Should().Be("Review Customer");
+            review.CustomerInitial.Should().Be("RC");
+            review.Rating.Should().Be(5);
+            review.Comment.Should().Be("Excellent service.");
+            review.IsPublic.Should().BeTrue();
+        }
+
+        client.DefaultRequestHeaders.Authorization = null;
+        var publicBusiness = await client.GetFromJsonAsync<PublicBusinessDetailResponse>(
+            $"/api/public/businesses/{setup.BusinessId}");
+
+        publicBusiness!.ReviewSummary.ReviewCount.Should().Be(1);
+        publicBusiness.ReviewSummary.AverageRating.Should().Be(5.0m);
+        publicBusiness.Reviews.Should().ContainSingle(review =>
+            review.Id == reviewResponse.Id
+            && review.CustomerName == "Review Customer"
+            && review.Rating == 5
+            && review.Comment == "Excellent service.");
+    }
+
+    [Theory]
+    [InlineData(AppointmentStatus.Pending)]
+    [InlineData(AppointmentStatus.Approved)]
+    [InlineData(AppointmentStatus.Rejected)]
+    [InlineData(AppointmentStatus.Cancelled)]
+    [InlineData(AppointmentStatus.NoShow)]
+    [InlineData(AppointmentStatus.Expired)]
+    public async Task Customer_review_rejects_non_completed_appointments(AppointmentStatus status)
+    {
+        var suffix = $"{status.ToString().ToLowerInvariant()}-{Guid.NewGuid():N}";
+        var (_, owner) = await RegisterAndGetCurrentUserAsync($"review-status-owner-{suffix}@example.com");
+        var setup = await CreateBookableBusinessAsync(owner.Id, $"Review Status {status} Barber");
+        var (customerToken, customer) = await RegisterAndGetCurrentUserAsync(
+            $"review-status-customer-{suffix}@example.com");
+        var appointmentId = await AddAppointmentAsync(
+            customer.Id,
+            setup,
+            status,
+            DateTimeOffset.UtcNow.AddDays(1),
+            DateTimeOffset.UtcNow.AddDays(1).AddMinutes(30));
+        client.DefaultRequestHeaders.Authorization = new("Bearer", customerToken);
+
+        var response = await client.PostAsJsonAsync(
+            $"/api/customer/appointments/{appointmentId}/review",
+            new
+            {
+                rating = 5,
+                comment = "Great service."
+            });
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        (await dbContext.BusinessReviews.AnyAsync(review => review.AppointmentId == appointmentId))
+            .Should()
+            .BeFalse();
+    }
+
+    [Fact]
+    public async Task Customer_review_rejects_duplicate_and_other_customer_submissions()
+    {
+        var (_, owner) = await RegisterAndGetCurrentUserAsync("review-guard-owner@example.com");
+        var setup = await CreateBookableBusinessAsync(owner.Id, "Review Guard Barber");
+        var (customerToken, customer) = await RegisterAndGetCurrentUserAsync("review-guard-customer@example.com");
+        var otherCustomerToken = await RegisterAsync("review-guard-other@example.com");
+        var appointmentId = await AddAppointmentAsync(
+            customer.Id,
+            setup,
+            AppointmentStatus.Completed,
+            DateTimeOffset.UtcNow.AddHours(-2),
+            DateTimeOffset.UtcNow.AddHours(-1));
+        client.DefaultRequestHeaders.Authorization = new("Bearer", customerToken);
+
+        var firstResponse = await client.PostAsJsonAsync(
+            $"/api/customer/appointments/{appointmentId}/review",
+            new
+            {
+                rating = 4,
+                comment = "Clean service."
+            });
+        var duplicateResponse = await client.PostAsJsonAsync(
+            $"/api/customer/appointments/{appointmentId}/review",
+            new
+            {
+                rating = 5,
+                comment = "Second review."
+            });
+
+        client.DefaultRequestHeaders.Authorization = new("Bearer", otherCustomerToken);
+        var otherCustomerResponse = await client.PostAsJsonAsync(
+            $"/api/customer/appointments/{appointmentId}/review",
+            new
+            {
+                rating = 5,
+                comment = "Not my appointment."
+            });
+
+        firstResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+        duplicateResponse.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        otherCustomerResponse.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task Customer_review_validates_rating_and_comment()
+    {
+        var (_, owner) = await RegisterAndGetCurrentUserAsync("review-validation-owner@example.com");
+        var setup = await CreateBookableBusinessAsync(owner.Id, "Review Validation Barber");
+        var (customerToken, customer) = await RegisterAndGetCurrentUserAsync("review-validation-customer@example.com");
+        var appointmentId = await AddAppointmentAsync(
+            customer.Id,
+            setup,
+            AppointmentStatus.Completed,
+            DateTimeOffset.UtcNow.AddHours(-2),
+            DateTimeOffset.UtcNow.AddHours(-1));
+        client.DefaultRequestHeaders.Authorization = new("Bearer", customerToken);
+
+        var lowRatingResponse = await client.PostAsJsonAsync(
+            $"/api/customer/appointments/{appointmentId}/review",
+            new
+            {
+                rating = 0,
+                comment = "Great service."
+            });
+        var highRatingResponse = await client.PostAsJsonAsync(
+            $"/api/customer/appointments/{appointmentId}/review",
+            new
+            {
+                rating = 6,
+                comment = "Great service."
+            });
+        var blankCommentResponse = await client.PostAsJsonAsync(
+            $"/api/customer/appointments/{appointmentId}/review",
+            new
+            {
+                rating = 5,
+                comment = "   "
+            });
+        var longCommentResponse = await client.PostAsJsonAsync(
+            $"/api/customer/appointments/{appointmentId}/review",
+            new
+            {
+                rating = 5,
+                comment = new string('a', 1201)
+            });
+
+        lowRatingResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        highRatingResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        blankCommentResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        longCommentResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        (await dbContext.BusinessReviews.AnyAsync(review => review.AppointmentId == appointmentId))
+            .Should()
+            .BeFalse();
+    }
+
+    [Fact]
+    public async Task Reviewed_completed_appointment_cannot_be_marked_no_show()
+    {
+        var (ownerToken, owner) = await RegisterAndGetCurrentUserAsync("review-no-show-owner@example.com");
+        var setup = await CreateBookableBusinessAsync(owner.Id, "Review No Show Barber");
+        await AddOwnerMembershipAsync(owner.Id, setup.BusinessId);
+        var (employeeToken, employee) = await RegisterAndGetCurrentUserAsync("review-no-show-employee@example.com");
+        var employeeStaffId = await AddEmployeeAsync(setup.BusinessId, employee.Id, setup.LocalDate);
+        var (_, customer) = await RegisterAndGetCurrentUserAsync("review-no-show-customer@example.com");
+        var ownerAppointmentId = await AddAppointmentAsync(
+            customer.Id,
+            setup,
+            AppointmentStatus.Completed,
+            DateTimeOffset.UtcNow.AddHours(-2),
+            DateTimeOffset.UtcNow.AddHours(-1));
+        var employeeAppointmentId = await AddAppointmentAsync(
+            customer.Id,
+            setup,
+            AppointmentStatus.Completed,
+            DateTimeOffset.UtcNow.AddHours(-4),
+            DateTimeOffset.UtcNow.AddHours(-3),
+            employeeStaffId);
+        await AddBusinessReviewAsync(ownerAppointmentId, setup.BusinessId);
+        await AddBusinessReviewAsync(employeeAppointmentId, setup.BusinessId);
+
+        client.DefaultRequestHeaders.Authorization = new("Bearer", ownerToken);
+        var ownerResponse = await client.PostAsync(
+            $"/api/owner/businesses/{setup.BusinessId}/appointments/{ownerAppointmentId}/no-show",
+            content: null);
+
+        client.DefaultRequestHeaders.Authorization = new("Bearer", employeeToken);
+        var employeeResponse = await client.PostAsync(
+            $"/api/employee/appointments/{employeeAppointmentId}/no-show",
+            content: null);
+
+        ownerResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        employeeResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
     public async Task Customer_appointment_list_processes_due_lifecycle_before_returning_appointments()
     {
         var (_, owner) = await RegisterAndGetCurrentUserAsync("customer-list-lifecycle-owner@example.com");
@@ -1212,6 +1451,26 @@ public class AuthAndBusinessFlowTests : IClassFixture<RendezvousApiFactory>
         return appointment.Id;
     }
 
+    private async Task AddBusinessReviewAsync(Guid appointmentId, Guid businessId)
+    {
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        dbContext.BusinessReviews.Add(new BusinessReview
+        {
+            BusinessId = businessId,
+            AppointmentId = appointmentId,
+            CustomerName = "Review Customer",
+            CustomerInitial = "RC",
+            Rating = 5,
+            Comment = "Great service.",
+            CreatedAtUtc = DateTimeOffset.UtcNow,
+            IsPublic = true
+        });
+
+        await dbContext.SaveChangesAsync();
+    }
+
     private async Task<IReadOnlyList<Guid>> AddAppointmentsAsync(
         Guid customerUserId,
         BookableBusinessSetup setup)
@@ -1317,6 +1576,34 @@ public class AuthAndBusinessFlowTests : IClassFixture<RendezvousApiFactory>
         Guid Id,
         string Status,
         DateTimeOffset StartsAtUtc);
+
+    private sealed record CustomerAppointmentListResponse(
+        Guid Id,
+        string Status,
+        DateTimeOffset StartsAtUtc,
+        bool HasReview);
+
+    private sealed record CustomerAppointmentReviewResponse(
+        Guid Id,
+        Guid AppointmentId,
+        Guid BusinessId,
+        decimal Rating,
+        string Comment);
+
+    private sealed record PublicBusinessDetailResponse(
+        Guid Id,
+        PublicBusinessReviewSummaryResponse ReviewSummary,
+        IReadOnlyList<PublicBusinessReviewResponse> Reviews);
+
+    private sealed record PublicBusinessReviewSummaryResponse(
+        decimal AverageRating,
+        int ReviewCount);
+
+    private sealed record PublicBusinessReviewResponse(
+        Guid Id,
+        string CustomerName,
+        decimal Rating,
+        string Comment);
 
     private sealed record OwnerAppointmentRequestListResponse(
         Guid Id,

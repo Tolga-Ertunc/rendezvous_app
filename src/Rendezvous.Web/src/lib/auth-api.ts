@@ -162,11 +162,28 @@ export type CustomerAppointment = {
   staffDisplayName: string
   priceAmount: number
   currencyCode: string
+  hasReview: boolean
 }
 
 export type CustomerAppointmentDecision = {
   id: string
   status: string
+}
+
+export type CustomerAppointmentReviewRequest = {
+  rating: number
+  comment: string
+}
+
+export type CustomerAppointmentReview = {
+  id: string
+  appointmentId: string
+  businessId: string
+  customerName: string
+  customerInitial: string
+  rating: number
+  comment: string
+  createdAtUtc: string
 }
 
 export type EmployeeAppointment = {
@@ -907,6 +924,19 @@ export function cancelCustomerAppointment(appointmentId: string) {
   return apiRequest<CustomerAppointmentDecision>(
     `/customer/appointments/${appointmentId}/cancel`,
     { method: "POST" }
+  )
+}
+
+export function createCustomerAppointmentReview(
+  appointmentId: string,
+  request: CustomerAppointmentReviewRequest
+) {
+  return apiRequest<CustomerAppointmentReview>(
+    `/customer/appointments/${appointmentId}/review`,
+    {
+      method: "POST",
+      body: JSON.stringify(request),
+    }
   )
 }
 

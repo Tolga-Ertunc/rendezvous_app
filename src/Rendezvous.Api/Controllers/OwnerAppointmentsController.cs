@@ -211,6 +211,12 @@ public class OwnerAppointmentsController : ControllerBase
             return NotFound();
         }
 
+        if (appointment.Status == AppointmentStatus.Completed
+            && await AppointmentHasReviewAsync(appointment.Id, cancellationToken))
+        {
+            return BadRequest(new { message = "This appointment already has a review." });
+        }
+
         if (!appointment.MarkNoShow(DateTimeOffset.UtcNow))
         {
             return BadRequest(new { message = "This appointment cannot be marked no-show." });
@@ -238,6 +244,15 @@ public class OwnerAppointmentsController : ControllerBase
                     && membership.Role == BusinessMembershipRole.Owner
                     && membership.Status == BusinessMembershipStatus.Active,
                 cancellationToken);
+    }
+
+    private Task<bool> AppointmentHasReviewAsync(
+        Guid appointmentId,
+        CancellationToken cancellationToken)
+    {
+        return dbContext.BusinessReviews
+            .AsNoTracking()
+            .AnyAsync(review => review.AppointmentId == appointmentId, cancellationToken);
     }
 
     private Guid? GetCurrentUserId()

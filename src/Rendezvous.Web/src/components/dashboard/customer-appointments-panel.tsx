@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import type React from "react"
-import { CalendarDays, X } from "lucide-react"
+import { CalendarDays, MessageSquare, Star, X } from "lucide-react"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
@@ -24,15 +24,31 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import {
   cancelCustomerAppointment,
+  createCustomerAppointmentReview,
   getCustomerAppointments,
 } from "@/lib/auth-api"
+import { ApiError } from "@/lib/api-client"
 import type { AppointmentFilters, CustomerAppointment } from "@/lib/auth-api"
 
 export function CustomerAppointmentsPanel() {
   const [appointments, setAppointments] = useState<CustomerAppointment[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [actingAppointmentId, setActingAppointmentId] = useState("")
+  const [reviewingAppointment, setReviewingAppointment] =
+    useState<CustomerAppointment | null>(null)
+  const [reviewRating, setReviewRating] = useState(5)
+  const [reviewComment, setReviewComment] = useState("")
+  const [reviewError, setReviewError] = useState("")
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false)
   const [statusFilter, setStatusFilter] = useState("all")
   const [fromDate, setFromDate] = useState("")
   const [toDate, setToDate] = useState("")
@@ -114,6 +130,66 @@ export function CustomerAppointmentsPanel() {
       setError("Appointment could not be cancelled.")
     } finally {
       setActingAppointmentId("")
+    }
+  }
+
+  function openReviewDialog(appointment: CustomerAppointment) {
+    setReviewingAppointment(appointment)
+    setReviewRating(5)
+    setReviewComment("")
+    setReviewError("")
+    setMessage("")
+    setError("")
+  }
+
+  function closeReviewDialog() {
+    if (isSubmittingReview) {
+      return
+    }
+
+    setReviewingAppointment(null)
+    setReviewRating(5)
+    setReviewComment("")
+    setReviewError("")
+  }
+
+  async function handleReviewSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+
+    if (!reviewingAppointment) {
+      return
+    }
+
+    const comment = reviewComment.trim()
+    if (!comment) {
+      setReviewError("Review comment is required.")
+      return
+    }
+
+    if (comment.length > 1200) {
+      setReviewError("Review comment cannot exceed 1200 characters.")
+      return
+    }
+
+    setIsSubmittingReview(true)
+    setReviewError("")
+    setError("")
+
+    try {
+      await createCustomerAppointmentReview(reviewingAppointment.id, {
+        rating: reviewRating,
+        comment,
+      })
+      setReviewingAppointment(null)
+      setReviewComment("")
+      setMessage("Review submitted.")
+      await refreshAppointments()
+    } catch (caughtError) {
+      setReviewError(
+        getApiErrorMessage(caughtError, "Review could not be submitted.")
+      )
+    } finally {
+      setIsSubmittingReview(false)
     }
   }
 
@@ -223,25 +299,125 @@ export function CustomerAppointmentsPanel() {
                       </p>
                     </div>
                   </div>
-                  {canShowCancel(appointment) ? (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      disabled={actingAppointmentId === appointment.id}
-                      onClick={() => handleCancel(appointment.id)}
-                    >
-                      <X data-icon="inline-start" className="size-4" />
-                      {actingAppointmentId === appointment.id
-                        ? "Cancelling"
-                        : "Cancel"}
-                    </Button>
-                  ) : null}
+                  <div className="flex flex-wrap justify-end gap-2">
+                    {appointment.status === "Completed" && appointment.hasReview ? (
+                      <Badge variant="outline">Review submitted</Badge>
+                    ) : null}
+                    {canShowReview(appointment) ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => openReviewDialog(appointment)}
+                      >
+                        <MessageSquare data-icon="inline-start" className="size-4" />
+                        Review
+                      </Button>
+                    ) : null}
+                    {canShowCancel(appointment) ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={actingAppointmentId === appointment.id}
+                        onClick={() => handleCancel(appointment.id)}
+                      >
+                        <X data-icon="inline-start" className="size-4" />
+                        {actingAppointmentId === appointment.id
+                          ? "Cancelling"
+                          : "Cancel"}
+                      </Button>
+                    ) : null}
+                  </div>
                 </div>
               </div>
             ))}
           </div>
         )}
+
+        <Dialog
+          open={reviewingAppointment !== null}
+          onOpenChange={(open) => {
+            if (!open) {
+              closeReviewDialog()
+            }
+          }}
+        >
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Leave a review</DialogTitle>
+              <DialogDescription>
+                {reviewingAppointment?.businessName}
+              </DialogDescription>
+            </DialogHeader>
+            <form className="space-y-4" onSubmit={handleReviewSubmit}>
+              {reviewError ? (
+                <Alert className="border-destructive/30 bg-destructive/5 text-destructive">
+                  <AlertTitle>Review failed</AlertTitle>
+                  <AlertDescription>{reviewError}</AlertDescription>
+                </Alert>
+              ) : null}
+
+              <Field label="Rating" id="customer-review-rating">
+                <div
+                  id="customer-review-rating"
+                  className="flex items-center gap-1"
+                  role="radiogroup"
+                  aria-label="Rating"
+                >
+                  {[1, 2, 3, 4, 5].map((rating) => (
+                    <button
+                      key={rating}
+                      type="button"
+                      role="radio"
+                      aria-checked={reviewRating === rating}
+                      title={`${rating} star${rating === 1 ? "" : "s"}`}
+                      className="rounded-md p-1 text-muted-foreground transition-colors hover:text-[#f6b73c] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      onClick={() => setReviewRating(rating)}
+                    >
+                      <Star
+                        className={
+                          rating <= reviewRating
+                            ? "size-6 fill-[#f6b73c] text-[#f6b73c]"
+                            : "size-6"
+                        }
+                      />
+                      <span className="sr-only">
+                        {rating} star{rating === 1 ? "" : "s"}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </Field>
+
+              <Field label="Comment" id="customer-review-comment">
+                <textarea
+                  id="customer-review-comment"
+                  value={reviewComment}
+                  maxLength={1200}
+                  rows={5}
+                  className="min-h-28 w-full resize-y rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                  onChange={(event) => setReviewComment(event.target.value)}
+                />
+              </Field>
+
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={isSubmittingReview}
+                  onClick={closeReviewDialog}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={isSubmittingReview}>
+                  <MessageSquare data-icon="inline-start" className="size-4" />
+                  {isSubmittingReview ? "Submitting" : "Submit review"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
       </CardContent>
     </Card>
   )
@@ -268,6 +444,27 @@ function canShowCancel(appointment: CustomerAppointment) {
   }
 
   return new Date(appointment.startsAtUtc).getTime() - Date.now() >= 60 * 60 * 1000
+}
+
+function canShowReview(appointment: CustomerAppointment) {
+  return appointment.status === "Completed" && !appointment.hasReview
+}
+
+function getApiErrorMessage(caughtError: unknown, fallback: string) {
+  if (caughtError instanceof ApiError && isMessageBody(caughtError.body)) {
+    return caughtError.body.message
+  }
+
+  return fallback
+}
+
+function isMessageBody(value: unknown): value is { message: string } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "message" in value &&
+    typeof (value as { message: unknown }).message === "string"
+  )
 }
 
 function buildAppointmentFilters(
