@@ -19,8 +19,13 @@ import {
   markNotificationRead,
 } from "@/lib/auth-api"
 import type { NotificationItem } from "@/lib/auth-api"
+import { cn } from "@/lib/utils"
 
-export function NotificationButton() {
+type NotificationButtonProps = {
+  className?: string
+}
+
+export function NotificationButton({ className }: NotificationButtonProps) {
   const [open, setOpen] = useState(false)
   const [notifications, setNotifications] = useState<NotificationItem[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
@@ -59,7 +64,7 @@ export function NotificationButton() {
       <Button
         type="button"
         variant="outline"
-        className="relative"
+        className={cn("relative", className)}
         onClick={() => setOpen(true)}
         aria-label="Notifications"
       >

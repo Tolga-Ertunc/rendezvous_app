@@ -6,9 +6,11 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
   BriefcaseBusiness,
-  Building2,
   CalendarDays,
+  Compass,
+  LogIn,
   ShieldCheck,
+  UserPlus,
   UserRound,
   UsersRound,
 } from "lucide-react"
@@ -38,6 +40,15 @@ type AppNavigationProps = {
   logoutRedirectTo?: string
 }
 
+const headerButtonClass =
+  "h-11 rounded-xl border-[#d4d4d8] bg-white px-5 text-base font-medium text-[#111111] hover:bg-[#f4f4f5] hover:text-[#111111] focus:bg-[#f4f4f5] focus:text-[#111111]"
+
+const activeHeaderButtonClass =
+  "border-[#cfe7c7] bg-[#f4fbf1] text-[#4f9d3a] hover:bg-[#eef8ea] hover:text-[#4f9d3a] focus:bg-[#eef8ea] focus:text-[#4f9d3a] data-[active]:bg-[#f4fbf1] data-[active]:text-[#4f9d3a] data-[active=true]:bg-[#f4fbf1] data-[active=true]:text-[#4f9d3a]"
+
+const menuTriggerOpenClass =
+  "data-[state=open]:bg-[#f4f4f5] data-[state=open]:text-[#111111]"
+
 export function AppNavigation({
   showDiscoverLink = true,
   showGuestLinks = true,
@@ -59,6 +70,7 @@ export function AppNavigation({
       if (!hasToken) {
         if (isMounted) {
           setUser(null)
+          setOwnerBusinesses([])
         }
         return
       }
@@ -71,6 +83,7 @@ export function AppNavigation({
       } catch {
         if (isMounted) {
           setUser(null)
+          setOwnerBusinesses([])
         }
       }
     }
@@ -102,7 +115,11 @@ export function AppNavigation({
 
   useEffect(() => {
     if (!isOwner) {
-      return
+      const resetOwnerBusinesses = window.setTimeout(() => {
+        setOwnerBusinesses([])
+      }, 0)
+
+      return () => window.clearTimeout(resetOwnerBusinesses)
     }
 
     let isMounted = true
@@ -133,14 +150,14 @@ export function AppNavigation({
       : "/owner"
 
   return (
-    <div className="flex flex-1 flex-wrap items-center justify-end gap-2">
-      <NavigationMenu className="max-w-full justify-end">
-        <NavigationMenuList>
+    <div className="flex flex-1 flex-wrap items-center justify-start gap-3 lg:justify-end">
+      <NavigationMenu className="max-w-full flex-none justify-start lg:justify-end">
+        <NavigationMenuList className="gap-3">
           {showDiscoverLink ? (
             <NavigationLink
               href="/"
               label="Discover"
-              icon={Building2}
+              icon={Compass}
               active={pathname === "/" || pathname.startsWith("/businesses")}
             />
           ) : null}
@@ -162,15 +179,18 @@ export function AppNavigation({
                 <NavigationMenuItem>
                   <NavigationMenuTrigger
                     className={cn(
+                      buttonVariants({ variant: "outline", size: "lg" }),
+                      headerButtonClass,
+                      menuTriggerOpenClass,
                       isActiveGroup(pathname, "/employee") &&
-                        "bg-primary/10 text-primary"
+                        activeHeaderButtonClass
                     )}
                   >
-                    <UsersRound className="mr-2 size-4" aria-hidden="true" />
+                    <UsersRound className="mr-2 size-5" aria-hidden="true" />
                     Employee Panel
                   </NavigationMenuTrigger>
-                  <NavigationMenuContent>
-                    <div className="grid w-[230px] gap-1">
+                  <NavigationMenuContent className="right-0 w-[230px] p-2">
+                    <div className="grid gap-1">
                       <MenuPanelLink href="/employee/requests" title="Requests" />
                       <MenuPanelLink
                         href="/employee/appointments"
@@ -185,18 +205,21 @@ export function AppNavigation({
                 <NavigationMenuItem>
                   <NavigationMenuTrigger
                     className={cn(
+                      buttonVariants({ variant: "outline", size: "lg" }),
+                      headerButtonClass,
+                      menuTriggerOpenClass,
                       isActiveGroup(pathname, "/owner") &&
-                        "bg-primary/10 text-primary"
+                        activeHeaderButtonClass
                     )}
                   >
                     <BriefcaseBusiness
-                      className="mr-2 size-4"
+                      className="mr-2 size-5"
                       aria-hidden="true"
                     />
                     Owner Panel
                   </NavigationMenuTrigger>
-                  <NavigationMenuContent>
-                    <div className="grid w-[260px] gap-1">
+                  <NavigationMenuContent className="right-0 w-[260px] p-2">
+                    <div className="grid gap-1">
                       <MenuPanelLink href={ownerHref} title="Open owner panel" />
                       <MenuPanelLink
                         href="/owner/create-business"
@@ -214,15 +237,18 @@ export function AppNavigation({
                 <NavigationMenuItem>
                   <NavigationMenuTrigger
                     className={cn(
+                      buttonVariants({ variant: "outline", size: "lg" }),
+                      headerButtonClass,
+                      menuTriggerOpenClass,
                       isActiveGroup(pathname, "/admin") &&
-                        "bg-primary/10 text-primary"
+                        activeHeaderButtonClass
                     )}
                   >
-                    <ShieldCheck className="mr-2 size-4" aria-hidden="true" />
+                    <ShieldCheck className="mr-2 size-5" aria-hidden="true" />
                     Admin Panel
                   </NavigationMenuTrigger>
-                  <NavigationMenuContent>
-                    <div className="grid w-[220px] gap-1">
+                  <NavigationMenuContent className="right-0 w-[220px] p-2">
+                    <div className="grid gap-1">
                       <MenuPanelLink href="/admin/businesses" title="Businesses" />
                       <MenuPanelLink href="/admin/users" title="Users" />
                       <MenuPanelLink
@@ -240,18 +266,32 @@ export function AppNavigation({
 
       {user ? (
         <>
-          <NotificationButton />
-          <SignOutButton redirectTo={logoutRedirectTo} />
+          <NotificationButton className="h-11 rounded-xl border-[#d4d4d8] bg-white px-4 text-[#111111] hover:bg-[#f4f4f5] hover:text-[#111111]" />
+          <SignOutButton
+            redirectTo={logoutRedirectTo}
+            className={headerButtonClass}
+          />
         </>
       ) : showGuestLinks ? (
         <>
           <Link
             href="/login"
-            className={cn(buttonVariants({ variant: "outline" }))}
+            className={cn(
+              buttonVariants({ variant: "outline", size: "lg" }),
+              headerButtonClass
+            )}
           >
+            <LogIn className="mr-2 size-5" aria-hidden="true" />
             Sign in
           </Link>
-          <Link href="/register" className={cn(buttonVariants())}>
+          <Link
+            href="/register"
+            className={cn(
+              buttonVariants({ size: "lg" }),
+              "h-11 rounded-full bg-[#111111] px-5 text-base font-bold text-white hover:bg-[#27272a]"
+            )}
+          >
+            <UserPlus className="mr-2 size-5" aria-hidden="true" />
             Sign up
           </Link>
         </>
@@ -277,12 +317,13 @@ function NavigationLink({
         asChild
         active={active}
         className={cn(
-          href === "/profile" &&
-            "data-[active]:bg-[#f4fbf1] data-[active]:text-[#4f9d3a] data-[active=true]:bg-[#f4fbf1] data-[active=true]:text-[#4f9d3a]"
+          buttonVariants({ variant: "outline", size: "lg" }),
+          headerButtonClass,
+          active && activeHeaderButtonClass
         )}
       >
         <Link href={href}>
-          <Icon className="mr-2 size-4" />
+          <Icon className="mr-2 size-5" />
           {label}
         </Link>
       </NavigationMenuLink>
@@ -295,7 +336,13 @@ function MenuPanelLink({ href, title }: { href: string; title: string }) {
 
   return (
     <NavigationMenuLink asChild active={pathname === href}>
-      <Link href={href} className="w-full justify-start">
+      <Link
+        href={href}
+        className={cn(
+          "w-full justify-start rounded-md px-3 py-2 text-sm font-medium text-[#3f3f46] hover:bg-[#f4f4f5] hover:text-[#111111]",
+          pathname === href && "bg-[#f4fbf1] text-[#4f9d3a]"
+        )}
+      >
         {title}
       </Link>
     </NavigationMenuLink>
