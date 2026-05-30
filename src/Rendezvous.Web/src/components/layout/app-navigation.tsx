@@ -273,7 +273,14 @@ function NavigationLink({
 }) {
   return (
     <NavigationMenuItem>
-      <NavigationMenuLink asChild active={active}>
+      <NavigationMenuLink
+        asChild
+        active={active}
+        className={cn(
+          href === "/profile" &&
+            "data-[active]:bg-[#f4fbf1] data-[active]:text-[#4f9d3a] data-[active=true]:bg-[#f4fbf1] data-[active=true]:text-[#4f9d3a]"
+        )}
+      >
         <Link href={href}>
           <Icon className="mr-2 size-4" />
           {label}

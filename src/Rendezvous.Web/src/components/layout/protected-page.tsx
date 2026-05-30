@@ -20,6 +20,7 @@ import { clearAuthTokens, getAccessToken } from "@/lib/auth-storage"
 type ProtectedPageProps = {
   title: string
   description: string
+  shellVariant?: "default" | "profile"
   authorize?: (user: CurrentUser) => boolean
   children: (context: { user: CurrentUser }) => ReactNode
 }
@@ -27,6 +28,7 @@ type ProtectedPageProps = {
 export function ProtectedPage({
   title,
   description,
+  shellVariant,
   authorize,
   children,
 }: ProtectedPageProps) {
@@ -84,7 +86,11 @@ export function ProtectedPage({
 
   if (isLoading) {
     return (
-      <DashboardShell title={title} description={description}>
+      <DashboardShell
+        title={title}
+        description={description}
+        variant={shellVariant}
+      >
         <Card className="mx-auto w-full max-w-xl">
           <CardHeader>
             <CardTitle>Loading</CardTitle>
@@ -97,7 +103,11 @@ export function ProtectedPage({
 
   if (error || !user) {
     return (
-      <DashboardShell title={title} description={description}>
+      <DashboardShell
+        title={title}
+        description={description}
+        variant={shellVariant}
+      >
         <Card className="mx-auto w-full max-w-xl">
           <CardHeader>
             <CardTitle>Session unavailable</CardTitle>
@@ -114,7 +124,11 @@ export function ProtectedPage({
   }
 
   return (
-    <DashboardShell title={title} description={description}>
+    <DashboardShell
+      title={title}
+      description={description}
+      variant={shellVariant}
+    >
       {children({ user })}
     </DashboardShell>
   )
