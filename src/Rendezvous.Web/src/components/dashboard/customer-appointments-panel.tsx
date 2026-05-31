@@ -1,27 +1,33 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useState } from "react"
 import type React from "react"
 import {
   CalendarDays,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  CircleDashed,
   Clock,
   MessageSquare,
-  Scissors,
-  SlidersHorizontal,
   Star,
-  UserRound,
-  WalletCards,
   X,
 } from "lucide-react"
+import type { LucideIcon } from "lucide-react"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Card, CardContent } from "@/components/ui/card"
 import {
-  Card,
-  CardContent,
-} from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import {
   Select,
@@ -31,24 +37,54 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { ApiError } from "@/lib/api-client"
 import {
   cancelCustomerAppointment,
   createCustomerAppointmentReview,
   getCustomerAppointments,
 } from "@/lib/auth-api"
-import { ApiError } from "@/lib/api-client"
-import type { AppointmentFilters, CustomerAppointment } from "@/lib/auth-api"
+import type {
+  CustomerAppointment,
+  CustomerAppointmentListParams,
+  CustomerAppointmentsResponse,
+} from "@/lib/auth-api"
 import { cn } from "@/lib/utils"
 
+type AppointmentView = NonNullable<CustomerAppointmentListParams["view"]>
+type AppointmentSort = NonNullable<CustomerAppointmentListParams["sort"]>
+
+const pageSize = 10
+const businessNameMaxLength = 32
+
+const emptyAppointmentsResponse: CustomerAppointmentsResponse = {
+  items: [],
+  summary: {
+    total: 0,
+    pending: 0,
+    completed: 0,
+  },
+  page: {
+    page: 1,
+    pageSize,
+    totalItems: 0,
+    totalPages: 0,
+  },
+}
+
 export function CustomerAppointmentsPanel() {
-  const [appointments, setAppointments] = useState<CustomerAppointment[]>([])
+  const [appointmentsResponse, setAppointmentsResponse] =
+    useState<CustomerAppointmentsResponse>(emptyAppointmentsResponse)
+  const [view, setView] = useState<AppointmentView>("all")
+  const [sort, setSort] = useState<AppointmentSort>("date_desc")
+  const [page, setPage] = useState(1)
   const [isLoading, setIsLoading] = useState(true)
   const [actingAppointmentId, setActingAppointmentId] = useState("")
   const [reviewingAppointment, setReviewingAppointment] =
@@ -57,24 +93,30 @@ export function CustomerAppointmentsPanel() {
   const [reviewComment, setReviewComment] = useState("")
   const [reviewError, setReviewError] = useState("")
   const [isSubmittingReview, setIsSubmittingReview] = useState(false)
-  const [statusFilter, setStatusFilter] = useState("all")
-  const [fromDate, setFromDate] = useState("")
-  const [toDate, setToDate] = useState("")
   const [message, setMessage] = useState("")
   const [error, setError] = useState("")
 
   useEffect(() => {
     let isMounted = true
 
-    async function loadInitialAppointments() {
+    async function loadAppointments() {
       setIsLoading(true)
       setError("")
 
       try {
-        const nextAppointments = await getCustomerAppointments()
+        const nextResponse = await getCustomerAppointments({
+          view,
+          page,
+          pageSize,
+          sort,
+        })
 
         if (isMounted) {
-          setAppointments(nextAppointments)
+          setAppointmentsResponse(nextResponse)
+
+          if (nextResponse.page.page > 0 && nextResponse.page.page !== page) {
+            setPage(nextResponse.page.page)
+          }
         }
       } catch {
         if (isMounted) {
@@ -87,44 +129,33 @@ export function CustomerAppointmentsPanel() {
       }
     }
 
-    loadInitialAppointments()
+    loadAppointments()
 
     return () => {
       isMounted = false
     }
-  }, [])
+  }, [page, sort, view])
 
-  const summary = useMemo(() => {
-    return {
-      total: appointments.length,
-      active: appointments.filter((appointment) =>
-        ["Pending", "Approved"].includes(appointment.status)
-      ).length,
-      pending: appointments.filter((appointment) => appointment.status === "Pending")
-        .length,
-      completed: appointments.filter(
-        (appointment) => appointment.status === "Completed"
-      ).length,
-    }
-  }, [appointments])
+  const appointments = appointmentsResponse.items
+  const pagination = appointmentsResponse.page
 
-  const activeFilterCount = [
-    statusFilter !== "all",
-    Boolean(fromDate),
-    Boolean(toDate),
-  ].filter(Boolean).length
-
-  function getFilters(): AppointmentFilters | undefined {
-    return buildAppointmentFilters(statusFilter, fromDate, toDate)
-  }
-
-  async function refreshAppointments(filters = getFilters()) {
+  async function refreshAppointments(nextPage = page) {
     setIsLoading(true)
     setError("")
 
     try {
-      const nextAppointments = await getCustomerAppointments(filters)
-      setAppointments(nextAppointments)
+      const nextResponse = await getCustomerAppointments({
+        view,
+        page: nextPage,
+        pageSize,
+        sort,
+      })
+
+      setAppointmentsResponse(nextResponse)
+
+      if (nextResponse.page.page > 0 && nextResponse.page.page !== nextPage) {
+        setPage(nextResponse.page.page)
+      }
     } catch {
       setError("Appointments could not be loaded.")
     } finally {
@@ -132,17 +163,18 @@ export function CustomerAppointmentsPanel() {
     }
   }
 
-  async function applyFilters() {
+  function handleViewChange(nextView: string) {
+    setView(nextView as AppointmentView)
+    setPage(1)
     setMessage("")
-    await refreshAppointments()
+    setError("")
   }
 
-  async function clearFilters() {
-    setStatusFilter("all")
-    setFromDate("")
-    setToDate("")
+  function handleSortChange(nextSort: string) {
+    setSort(nextSort as AppointmentSort)
+    setPage(1)
     setMessage("")
-    await refreshAppointments(undefined)
+    setError("")
   }
 
   async function handleCancel(appointmentId: string) {
@@ -224,7 +256,7 @@ export function CustomerAppointmentsPanel() {
   return (
     <div className="grid gap-6">
       {message ? (
-        <Alert className="border-[#cfe7c7] bg-[#f4fbf1] text-[#2f6d22]">
+        <Alert className="border-[#d6ead5] bg-[#f6fbf5] text-[#255d20]">
           <AlertTitle>Updated</AlertTitle>
           <AlertDescription>{message}</AlertDescription>
         </Alert>
@@ -237,193 +269,152 @@ export function CustomerAppointmentsPanel() {
         </Alert>
       ) : null}
 
-      <div className="grid gap-4 md:grid-cols-4">
-        <MetricCard icon={CalendarDays} label="Total" value={summary.total} />
-        <MetricCard icon={Clock} label="Active" value={summary.active} />
-        <MetricCard icon={SlidersHorizontal} label="Pending" value={summary.pending} />
-        <MetricCard icon={Star} label="Completed" value={summary.completed} />
+      <div className="grid gap-4 md:grid-cols-3">
+        <MetricCard
+          icon={CalendarDays}
+          label="Total"
+          value={appointmentsResponse.summary.total}
+        />
+        <MetricCard
+          icon={CircleDashed}
+          label="Pending"
+          value={appointmentsResponse.summary.pending}
+        />
+        <MetricCard
+          icon={CheckCircle2}
+          label="Completed"
+          tone="completed"
+          value={appointmentsResponse.summary.completed}
+        />
       </div>
 
-      <Card className="border-[#e5e7eb] bg-white shadow-xs">
-        <CardContent className="p-4">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="flex size-10 items-center justify-center rounded-lg border border-[#e5e7eb] bg-[#fafafa] text-[#111111]">
-                <SlidersHorizontal className="size-5" aria-hidden="true" />
-              </div>
-              <h2 className="text-lg font-bold tracking-normal text-[#111111]">
-                Filters
-              </h2>
-            </div>
-            {activeFilterCount > 0 ? (
-              <Badge
-                variant="outline"
-                className="border-[#cfe7c7] bg-[#f4fbf1] text-[#4f9d3a]"
-              >
-                {activeFilterCount} active
-              </Badge>
-            ) : null}
+      <Card
+        className={cn(
+          "overflow-hidden border-[#e5e7eb] bg-white shadow-xs",
+          pagination.totalItems <= pageSize
+            ? "mx-auto w-fit max-w-full"
+            : "w-full"
+        )}
+      >
+        <CardContent className="p-0">
+          <div className="flex flex-col gap-4 border-b border-[#e5e7eb] p-4 sm:flex-row sm:items-center sm:justify-between">
+            <Tabs value={view} onValueChange={handleViewChange}>
+              <TabsList className="border-[#e5e7eb] bg-white shadow-none">
+                {appointmentViewOptions.map((option) => (
+                  <TabsTrigger
+                    key={option.value}
+                    value={option.value}
+                    className="data-[state=active]:bg-[#111111] data-[state=active]:text-white"
+                  >
+                    {option.label}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
+
+            <Select value={sort} onValueChange={handleSortChange}>
+              <SelectTrigger className="h-9 w-full rounded-lg border-[#d4d4d8] bg-white sm:w-[190px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="date_desc">Date newest first</SelectItem>
+                <SelectItem value="date_asc">Date oldest first</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
-          <div className="grid gap-3 md:grid-cols-[180px_minmax(0,1fr)_minmax(0,1fr)_auto] md:items-end">
-            <Field label="Status" id="customer-appointment-status">
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger
-                  id="customer-appointment-status"
-                  className="h-11 rounded-lg border-[#d4d4d8] bg-white"
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {appointmentStatusOptions.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-            <Field label="From" id="customer-appointment-from">
-              <Input
-                id="customer-appointment-from"
-                type="date"
-                value={fromDate}
-                className="h-11 rounded-lg border-[#d4d4d8] bg-white"
-                onChange={(event) => setFromDate(event.target.value)}
-              />
-            </Field>
-            <Field label="To" id="customer-appointment-to">
-              <Input
-                id="customer-appointment-to"
-                type="date"
-                value={toDate}
-                className="h-11 rounded-lg border-[#d4d4d8] bg-white"
-                onChange={(event) => setToDate(event.target.value)}
-              />
-            </Field>
-            <div className="flex flex-wrap gap-2 md:justify-end">
-              <Button
-                type="button"
-                className="h-11 rounded-full bg-[#111111] px-5 text-base font-bold text-white hover:bg-[#27272a]"
-                onClick={applyFilters}
-              >
-                Apply
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                className="h-11 rounded-xl border-[#d4d4d8] bg-white px-5 text-base font-medium text-[#111111] hover:bg-[#f4f4f5]"
-                onClick={clearFilters}
-              >
-                Clear
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {isLoading ? (
-        <Card className="border-[#e5e7eb] bg-white shadow-xs">
-          <CardContent className="p-5 text-sm leading-6 text-[#71717a]">
-            Loading appointments.
-          </CardContent>
-        </Card>
-      ) : appointments.length === 0 ? (
-        <Card className="border-[#e5e7eb] bg-white shadow-xs">
-          <CardContent className="flex min-h-[160px] items-center justify-center p-5 text-center text-sm leading-6 text-[#71717a]">
-            No appointments found.
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="grid gap-4">
-          {appointments.map((appointment) => (
-            <Card
-              key={appointment.id}
-              className="border-[#e5e7eb] bg-white shadow-xs transition-all hover:border-[#d4d4d8] hover:shadow-sm"
-            >
-              <CardContent className="p-5">
-                <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
-                  <div className="min-w-0 space-y-4">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div className="min-w-0 space-y-1">
-                        <h2 className="break-words text-xl font-bold tracking-normal text-[#111111]">
-                          {appointment.businessName}
-                        </h2>
-                        <p className="text-sm leading-6 text-[#71717a]">
-                          {formatAppointmentTime(appointment.startsAtUtc)}
-                        </p>
-                      </div>
-                      <Badge
-                        variant="outline"
-                        className={getStatusBadgeClass(appointment.status)}
-                      >
+          <Table className="min-w-[1120px] table-fixed [&_[data-slot=table-cell]]:px-2 [&_[data-slot=table-head]]:px-2">
+            <colgroup>
+              <col className="w-[145px]" />
+              <col className="w-[300px]" />
+              <col className="w-[190px]" />
+              <col className="w-[145px]" />
+              <col className="w-[95px]" />
+              <col className="w-[120px]" />
+              <col className="w-[125px]" />
+            </colgroup>
+            <TableHeader>
+              <TableRow className="hover:bg-transparent">
+                <TableHead className="text-center">Date & time</TableHead>
+                <TableHead className="text-center">Business</TableHead>
+                <TableHead className="text-center">Service</TableHead>
+                <TableHead className="text-center">Staff</TableHead>
+                <TableHead className="pr-3 text-center">Price</TableHead>
+                <TableHead className="pl-3 text-center">Status</TableHead>
+                <TableHead className="pr-6">
+                  <span className="ml-auto mr-6 block w-[96px] text-center">
+                    Actions
+                  </span>
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {isLoading ? (
+                <TableRow>
+                  <TableCell
+                    colSpan={7}
+                    className="h-28 text-center text-sm text-[#71717a]"
+                  >
+                    Loading appointments.
+                  </TableCell>
+                </TableRow>
+              ) : appointments.length === 0 ? (
+                <TableRow>
+                  <TableCell
+                    colSpan={7}
+                    className="h-32 text-center text-sm text-[#71717a]"
+                  >
+                    No appointments found.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                appointments.map((appointment) => (
+                  <TableRow key={appointment.id}>
+                    <TableCell className="text-center">
+                      <DateTimeCell startsAtUtc={appointment.startsAtUtc} />
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <BusinessCell appointment={appointment} />
+                    </TableCell>
+                    <TableCell className="text-center font-medium text-[#111111]">
+                      {appointment.serviceName || "Not set"}
+                    </TableCell>
+                    <TableCell className="text-center text-[#3f3f46]">
+                      {appointment.staffDisplayName || "Not set"}
+                    </TableCell>
+                    <TableCell className="pr-3 text-center font-semibold text-[#111111]">
+                      {formatPrice(
+                        appointment.priceAmount,
+                        appointment.currencyCode
+                      )}
+                    </TableCell>
+                    <TableCell className="pl-3 text-center">
+                      <Badge className={getStatusBadgeClass(appointment.status)}>
                         {getStatusLabel(appointment.status)}
                       </Badge>
-                    </div>
+                    </TableCell>
+                    <TableCell className="pr-6">
+                      <AppointmentActions
+                        appointment={appointment}
+                        actingAppointmentId={actingAppointmentId}
+                        onCancel={handleCancel}
+                        onReview={openReviewDialog}
+                      />
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
 
-                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                      <AppointmentDetail
-                        icon={Scissors}
-                        label="Service"
-                        value={appointment.serviceName}
-                      />
-                      <AppointmentDetail
-                        icon={UserRound}
-                        label="Staff"
-                        value={appointment.staffDisplayName}
-                      />
-                      <AppointmentDetail
-                        icon={WalletCards}
-                        label="Price"
-                        value={formatPrice(
-                          appointment.priceAmount,
-                          appointment.currencyCode
-                        )}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="flex flex-wrap justify-start gap-2 lg:justify-end">
-                    {appointment.status === "Completed" && appointment.hasReview ? (
-                      <Badge
-                        variant="outline"
-                        className="h-9 border-[#cfe7c7] bg-[#f4fbf1] px-3 text-[#4f9d3a]"
-                      >
-                        Review submitted
-                      </Badge>
-                    ) : null}
-                    {canShowReview(appointment) ? (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="h-9 rounded-xl border-[#d4d4d8] bg-white px-3 font-medium text-[#111111] hover:bg-[#f4f4f5]"
-                        onClick={() => openReviewDialog(appointment)}
-                      >
-                        <MessageSquare data-icon="inline-start" className="size-4" />
-                        Review
-                      </Button>
-                    ) : null}
-                    {canShowCancel(appointment) ? (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="h-9 rounded-xl border-[#d4d4d8] bg-white px-3 font-medium text-[#111111] hover:bg-[#f4f4f5]"
-                        disabled={actingAppointmentId === appointment.id}
-                        onClick={() => handleCancel(appointment.id)}
-                      >
-                        <X data-icon="inline-start" className="size-4" />
-                        {actingAppointmentId === appointment.id
-                          ? "Cancelling"
-                          : "Cancel"}
-                      </Button>
-                    ) : null}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
+          {pagination.totalItems > pageSize ? (
+            <PaginationFooter
+              pagination={pagination}
+              onPageChange={(nextPage) => setPage(nextPage)}
+            />
+          ) : null}
+        </CardContent>
+      </Card>
 
       <Dialog
         open={reviewingAppointment !== null}
@@ -462,13 +453,13 @@ export function CustomerAppointmentsPanel() {
                     role="radio"
                     aria-checked={reviewRating === rating}
                     title={`${rating} star${rating === 1 ? "" : "s"}`}
-                    className="rounded-md p-1 text-muted-foreground transition-colors hover:text-[#f6b73c] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="rounded-md p-1 text-muted-foreground transition-colors hover:text-[#eab308] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     onClick={() => setReviewRating(rating)}
                   >
                     <Star
                       className={
                         rating <= reviewRating
-                          ? "size-6 fill-[#f6b73c] text-[#f6b73c]"
+                          ? "size-6 fill-[#eab308] text-[#eab308]"
                           : "size-6"
                       }
                     />
@@ -512,25 +503,22 @@ export function CustomerAppointmentsPanel() {
   )
 }
 
-const appointmentStatusOptions = [
-  { value: "all", label: "All statuses" },
-  { value: "Pending", label: "Pending" },
-  { value: "Approved", label: "Approved" },
-  { value: "Rejected", label: "Rejected" },
-  { value: "Cancelled", label: "Cancelled" },
-  { value: "Completed", label: "Completed" },
-  { value: "NoShow", label: "No show" },
-  { value: "Expired", label: "Expired" },
+const appointmentViewOptions: { value: AppointmentView; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "upcoming", label: "Upcoming" },
+  { value: "completed", label: "Completed" },
 ]
 
 function MetricCard({
   icon: Icon,
   label,
   value,
+  tone = "neutral",
 }: {
-  icon: typeof CalendarDays
+  icon: LucideIcon
   label: string
   value: number
+  tone?: "neutral" | "completed"
 }) {
   return (
     <Card className="border-[#e5e7eb] bg-white shadow-xs">
@@ -541,7 +529,14 @@ function MetricCard({
             {value}
           </p>
         </div>
-        <div className="flex size-11 items-center justify-center rounded-lg border border-[#cfe7c7] bg-[#f4fbf1] text-[#4f9d3a]">
+        <div
+          className={cn(
+            "flex size-11 items-center justify-center rounded-lg border",
+            tone === "completed"
+              ? "border-[#d6ead5] bg-[#f6fbf5] text-[#255d20]"
+              : "border-[#e5e7eb] bg-[#fafafa] text-[#111111]"
+          )}
+        >
           <Icon className="size-5" aria-hidden="true" />
         </div>
       </CardContent>
@@ -549,61 +544,229 @@ function MetricCard({
   )
 }
 
-function AppointmentDetail({
-  icon: Icon,
-  label,
-  value,
-}: {
-  icon: typeof CalendarDays
-  label: string
-  value: string
-}) {
+function DateTimeCell({ startsAtUtc }: { startsAtUtc: string }) {
   return (
-    <div className="flex min-w-0 items-start gap-3 rounded-lg border border-[#e5e7eb] bg-[#fafafa] p-3">
-      <Icon className="mt-0.5 size-4 shrink-0 text-[#4f9d3a]" aria-hidden="true" />
+    <div className="grid gap-1.5 whitespace-nowrap">
+      <div className="flex items-center justify-center gap-2 font-medium text-[#111111]">
+        <CalendarDays className="size-4 text-[#3f3f46]" aria-hidden="true" />
+        {formatAppointmentDate(startsAtUtc)}
+      </div>
+      <div className="flex items-center justify-center gap-2 text-[#71717a]">
+        <Clock className="size-4 text-[#71717a]" aria-hidden="true" />
+        {formatAppointmentTime(startsAtUtc)}
+      </div>
+    </div>
+  )
+}
+
+function BusinessCell({ appointment }: { appointment: CustomerAppointment }) {
+  const photo = appointment.businessMainPhoto
+
+  return (
+    <div className="mx-auto flex w-fit max-w-full items-center justify-center gap-3">
+      <Avatar className="size-12 rounded-md border border-[#e5e7eb] bg-[#fafafa]">
+        {photo ? (
+          <AvatarImage
+            src={photo.imageUrl}
+            alt={photo.altText || appointment.businessName}
+            className="rounded-md"
+          />
+        ) : (
+          <AvatarFallback className="rounded-md bg-[#f4f4f5] text-[#111111]">
+            {getBusinessInitial(appointment.businessName)}
+          </AvatarFallback>
+        )}
+      </Avatar>
       <div className="min-w-0">
-        <p className="text-xs font-medium text-[#71717a]">{label}</p>
-        <p className="break-words text-sm font-semibold text-[#111111]">
-          {value || "Not set"}
+        <p
+          className="max-w-[210px] truncate font-semibold text-[#111111]"
+          title={appointment.businessName}
+        >
+          {truncateBusinessName(appointment.businessName)}
         </p>
       </div>
     </div>
   )
 }
 
-function canShowCancel(appointment: CustomerAppointment) {
-  if (appointment.status === "Pending") {
-    return true
+function AppointmentActions({
+  appointment,
+  actingAppointmentId,
+  onCancel,
+  onReview,
+}: {
+  appointment: CustomerAppointment
+  actingAppointmentId: string
+  onCancel: (appointmentId: string) => void
+  onReview: (appointment: CustomerAppointment) => void
+}) {
+  if (appointment.canReview) {
+    return (
+      <div className="grid grid-cols-[96px_24px] items-center justify-end gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          className="h-9 w-[96px] rounded-lg border-[#d4d4d8] bg-white px-2 font-medium text-[#111111] hover:bg-[#f4f4f5]"
+          onClick={() => onReview(appointment)}
+        >
+          <MessageSquare data-icon="inline-start" className="size-4" />
+          Review
+        </Button>
+        <span aria-hidden="true" />
+      </div>
+    )
   }
 
-  if (appointment.status !== "Approved") {
-    return false
+  if (appointment.hasReview && appointment.reviewRating !== null) {
+    return (
+      <div className="grid grid-cols-[96px_24px] items-center justify-end gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          disabled
+          className="h-9 w-[96px] rounded-lg border-[#d4d4d8] bg-[#f4f4f5] px-2 text-[#71717a]"
+        >
+          Reviewed
+        </Button>
+        <div className="grid justify-items-center gap-0.5 text-xs font-bold text-[#111111]">
+          <Star
+            className="size-4 fill-[#eab308] text-[#eab308]"
+            aria-hidden="true"
+          />
+          <span>{formatRating(appointment.reviewRating)}</span>
+        </div>
+      </div>
+    )
   }
 
-  return new Date(appointment.startsAtUtc).getTime() - Date.now() >= 60 * 60 * 1000
+  if (appointment.canCancel) {
+    return (
+      <div className="grid grid-cols-[96px_24px] items-center justify-end gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          className="h-9 w-[96px] rounded-lg border-[#d4d4d8] bg-white px-2 font-medium text-[#111111] hover:bg-[#f4f4f5]"
+          disabled={actingAppointmentId === appointment.id}
+          onClick={() => onCancel(appointment.id)}
+        >
+          <X data-icon="inline-start" className="size-4" />
+          {actingAppointmentId === appointment.id ? "Cancelling" : "Cancel"}
+        </Button>
+        <span aria-hidden="true" />
+      </div>
+    )
+  }
+
+  return (
+    <div className="grid grid-cols-[96px_24px] items-center justify-end gap-2">
+      <span className="text-center text-[#a1a1aa]">-</span>
+      <span aria-hidden="true" />
+    </div>
+  )
 }
 
-function canShowReview(appointment: CustomerAppointment) {
-  return appointment.status === "Completed" && !appointment.hasReview
+function PaginationFooter({
+  pagination,
+  onPageChange,
+}: {
+  pagination: CustomerAppointmentsResponse["page"]
+  onPageChange: (page: number) => void
+}) {
+  const firstItem = (pagination.page - 1) * pagination.pageSize + 1
+  const lastItem = Math.min(
+    pagination.page * pagination.pageSize,
+    pagination.totalItems
+  )
+  const visiblePages = getVisiblePages(pagination.page, pagination.totalPages)
+
+  return (
+    <div className="flex flex-col gap-3 border-t border-[#e5e7eb] p-4 text-sm text-[#71717a] sm:flex-row sm:items-center sm:justify-between">
+      <p>
+        Showing {firstItem} to {lastItem} of {pagination.totalItems} appointments
+      </p>
+      <div className="flex items-center justify-end gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          className="border-[#d4d4d8] bg-white text-[#111111] hover:bg-[#f4f4f5]"
+          disabled={pagination.page <= 1}
+          onClick={() => onPageChange(pagination.page - 1)}
+        >
+          <ChevronLeft className="size-4" aria-hidden="true" />
+          <span className="sr-only">Previous page</span>
+        </Button>
+        {visiblePages.map((visiblePage) => (
+          <Button
+            key={visiblePage}
+            type="button"
+            variant={visiblePage === pagination.page ? "default" : "outline"}
+            size="icon"
+            className={cn(
+              visiblePage === pagination.page
+                ? "bg-[#111111] text-white hover:bg-[#27272a]"
+                : "border-[#d4d4d8] bg-white text-[#111111] hover:bg-[#f4f4f5]"
+            )}
+            onClick={() => onPageChange(visiblePage)}
+          >
+            {visiblePage}
+          </Button>
+        ))}
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          className="border-[#d4d4d8] bg-white text-[#111111] hover:bg-[#f4f4f5]"
+          disabled={pagination.page >= pagination.totalPages}
+          onClick={() => onPageChange(pagination.page + 1)}
+        >
+          <ChevronRight className="size-4" aria-hidden="true" />
+          <span className="sr-only">Next page</span>
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+function getVisiblePages(currentPage: number, totalPages: number) {
+  if (totalPages <= 5) {
+    return Array.from({ length: totalPages }, (_, index) => index + 1)
+  }
+
+  if (currentPage <= 3) {
+    return [1, 2, 3, 4, 5]
+  }
+
+  if (currentPage >= totalPages - 2) {
+    return Array.from({ length: 5 }, (_, index) => totalPages - 4 + index)
+  }
+
+  return Array.from({ length: 5 }, (_, index) => currentPage - 2 + index)
 }
 
 function getStatusLabel(status: string) {
-  return appointmentStatusOptions.find((option) => option.value === status)?.label ?? status
+  return appointmentStatusLabels[status] ?? status
+}
+
+const appointmentStatusLabels: Record<string, string> = {
+  Pending: "Pending",
+  Approved: "Approved",
+  Rejected: "Rejected",
+  Cancelled: "Cancelled",
+  Completed: "Completed",
+  NoShow: "No show",
+  Expired: "Expired",
 }
 
 function getStatusBadgeClass(status: string) {
   return cn(
-    "px-3 py-1 text-sm",
-    status === "Approved" &&
-      "border-[#cfe7c7] bg-[#f4fbf1] text-[#4f9d3a]",
-    status === "Pending" &&
-      "border-[#f4d58d] bg-[#fff8e7] text-[#9a6400]",
-    status === "Completed" &&
-      "border-[#a9d8d2] bg-[#eaf8f6] text-[#0f766e]",
-    ["Cancelled", "Rejected", "Expired"].includes(status) &&
-      "border-[#e5e7eb] bg-[#fafafa] text-[#71717a]",
-    status === "NoShow" &&
-      "border-destructive/30 bg-destructive/5 text-destructive"
+    "border-transparent px-2.5 py-1 text-xs font-semibold",
+    status === "Approved" && "bg-[#2f6d22] text-white",
+    status === "Completed" && "bg-[#111111] text-white",
+    status === "Cancelled" && "bg-[#b42318] text-white",
+    status === "Pending" && "bg-[#e5e7eb] text-[#3f3f46]",
+    ["Rejected", "Expired", "NoShow"].includes(status) &&
+      "bg-[#f4f4f5] text-[#71717a]"
   )
 }
 
@@ -622,28 +785,6 @@ function isMessageBody(value: unknown): value is { message: string } {
     "message" in value &&
     typeof (value as { message: unknown }).message === "string"
   )
-}
-
-function buildAppointmentFilters(
-  status: string,
-  fromDate: string,
-  toDate: string
-): AppointmentFilters | undefined {
-  const filters: AppointmentFilters = {}
-
-  if (status !== "all") {
-    filters.status = status
-  }
-
-  if (fromDate) {
-    filters.fromUtc = new Date(`${fromDate}T00:00:00`).toISOString()
-  }
-
-  if (toDate) {
-    filters.toUtc = new Date(`${toDate}T23:59:59.999`).toISOString()
-  }
-
-  return Object.keys(filters).length > 0 ? filters : undefined
 }
 
 function Field({
@@ -665,21 +806,40 @@ function Field({
   )
 }
 
-function formatAppointmentTime(value: string) {
+function formatAppointmentDate(value: string) {
   return new Intl.DateTimeFormat("en", {
     dateStyle: "medium",
+  }).format(new Date(value))
+}
+
+function formatAppointmentTime(value: string) {
+  return new Intl.DateTimeFormat("en", {
     timeStyle: "short",
   }).format(new Date(value))
 }
 
 function formatPrice(amount: number, currencyCode: string) {
   try {
-    return new Intl.NumberFormat("en", {
+    return new Intl.NumberFormat("tr-TR", {
       style: "currency",
       currency: currencyCode,
-      maximumFractionDigits: 2,
+      maximumFractionDigits: Number.isInteger(amount) ? 0 : 2,
     }).format(amount)
   } catch {
     return `${amount} ${currencyCode}`
   }
+}
+
+function formatRating(value: number) {
+  return Number.isInteger(value) ? value.toString() : value.toFixed(1)
+}
+
+function truncateBusinessName(value: string) {
+  return value.length > businessNameMaxLength
+    ? `${value.slice(0, businessNameMaxLength - 1)}...`
+    : value
+}
+
+function getBusinessInitial(value: string) {
+  return value.trim().charAt(0).toUpperCase() || "B"
 }

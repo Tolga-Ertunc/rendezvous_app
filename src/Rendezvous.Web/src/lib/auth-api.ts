@@ -163,6 +163,34 @@ export type CustomerAppointment = {
   priceAmount: number
   currencyCode: string
   hasReview: boolean
+  businessMainPhoto: CustomerAppointmentBusinessPhoto | null
+  reviewRating: number | null
+  canCancel: boolean
+  canReview: boolean
+}
+
+export type CustomerAppointmentBusinessPhoto = {
+  imageUrl: string
+  altText: string
+}
+
+export type CustomerAppointmentSummary = {
+  total: number
+  pending: number
+  completed: number
+}
+
+export type CustomerAppointmentsPage = {
+  page: number
+  pageSize: number
+  totalItems: number
+  totalPages: number
+}
+
+export type CustomerAppointmentsResponse = {
+  items: CustomerAppointment[]
+  summary: CustomerAppointmentSummary
+  page: CustomerAppointmentsPage
 }
 
 export type CustomerAppointmentDecision = {
@@ -221,6 +249,13 @@ export type AppointmentFilters = {
   status?: string
   fromUtc?: string
   toUtc?: string
+}
+
+export type CustomerAppointmentListParams = {
+  view?: "all" | "upcoming" | "completed"
+  page?: number
+  pageSize?: number
+  sort?: "date_desc" | "date_asc"
 }
 
 export type AdminBusinessStatus = {
@@ -915,9 +950,9 @@ export function markOwnerAppointmentNoShow(
   )
 }
 
-export function getCustomerAppointments(params?: AppointmentFilters) {
-  const query = buildAppointmentQuery(params)
-  return apiRequest<CustomerAppointment[]>(`/customer/appointments${query}`)
+export function getCustomerAppointments(params?: CustomerAppointmentListParams) {
+  const query = buildCustomerAppointmentQuery(params)
+  return apiRequest<CustomerAppointmentsResponse>(`/customer/appointments${query}`)
 }
 
 export function cancelCustomerAppointment(appointmentId: string) {
@@ -1099,5 +1134,14 @@ function buildAppointmentQuery(params?: AppointmentFilters) {
     status: params?.status,
     fromUtc: params?.fromUtc,
     toUtc: params?.toUtc,
+  })
+}
+
+function buildCustomerAppointmentQuery(params?: CustomerAppointmentListParams) {
+  return buildQuery({
+    view: params?.view,
+    page: params?.page?.toString(),
+    pageSize: params?.pageSize?.toString(),
+    sort: params?.sort,
   })
 }

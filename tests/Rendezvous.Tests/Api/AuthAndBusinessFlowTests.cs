@@ -301,11 +301,12 @@ public class AuthAndBusinessFlowTests : IClassFixture<RendezvousApiFactory>
         reviewResponse.Rating.Should().Be(5);
         reviewResponse.Comment.Should().Be("Excellent service.");
 
-        var customerAppointments = await client.GetFromJsonAsync<IReadOnlyList<CustomerAppointmentListResponse>>(
-            "/api/customer/appointments?status=Completed");
-        customerAppointments.Should().ContainSingle(appointment =>
+        var customerAppointments = await client.GetFromJsonAsync<CustomerAppointmentsPageResponse>(
+            "/api/customer/appointments?view=completed");
+        customerAppointments!.Items.Should().ContainSingle(appointment =>
             appointment.Id == appointmentId
-            && appointment.HasReview);
+            && appointment.HasReview
+            && appointment.ReviewRating == 5);
 
         using (var scope = factory.Services.CreateScope())
         {
@@ -523,10 +524,10 @@ public class AuthAndBusinessFlowTests : IClassFixture<RendezvousApiFactory>
             nowUtc.AddMinutes(20));
         client.DefaultRequestHeaders.Authorization = new("Bearer", customerToken);
 
-        var appointments = await client.GetFromJsonAsync<IReadOnlyList<AppointmentListResponse>>(
+        var appointments = await client.GetFromJsonAsync<CustomerAppointmentsPageResponse>(
             "/api/customer/appointments");
 
-        appointments.Should().ContainSingle(appointment =>
+        appointments!.Items.Should().ContainSingle(appointment =>
             appointment.Id == appointmentId
             && appointment.Status == AppointmentStatus.Expired.ToString());
         using var scope = factory.Services.CreateScope();
@@ -537,6 +538,100 @@ public class AuthAndBusinessFlowTests : IClassFixture<RendezvousApiFactory>
             && notification.LinkUrl == "/appointments"))
             .Should()
             .BeTrue();
+    }
+
+    [Fact]
+    public async Task Customer_appointment_list_supports_views_sort_pagination_summary_and_business_photo()
+    {
+        var (_, owner) = await RegisterAndGetCurrentUserAsync("customer-list-page-owner@example.com");
+        var setup = await CreateBookableBusinessAsync(owner.Id, "Customer List Page Barber");
+        await AddBusinessPhotosAsync(setup.BusinessId);
+        var (customerToken, customer) = await RegisterAndGetCurrentUserAsync("customer-list-page-customer@example.com");
+        var nowUtc = DateTimeOffset.UtcNow;
+        var pendingId = await AddAppointmentAsync(
+            customer.Id,
+            setup,
+            AppointmentStatus.Pending,
+            nowUtc.AddDays(1),
+            nowUtc.AddDays(1).AddMinutes(30));
+        var secondPendingId = await AddAppointmentAsync(
+            customer.Id,
+            setup,
+            AppointmentStatus.Pending,
+            nowUtc.AddDays(2),
+            nowUtc.AddDays(2).AddMinutes(30));
+        var approvedId = await AddAppointmentAsync(
+            customer.Id,
+            setup,
+            AppointmentStatus.Approved,
+            nowUtc.AddDays(3),
+            nowUtc.AddDays(3).AddMinutes(30));
+        var reviewedCompletedId = await AddAppointmentAsync(
+            customer.Id,
+            setup,
+            AppointmentStatus.Completed,
+            nowUtc.AddDays(-1),
+            nowUtc.AddDays(-1).AddMinutes(30));
+        var cancelledId = await AddAppointmentAsync(
+            customer.Id,
+            setup,
+            AppointmentStatus.Cancelled,
+            nowUtc.AddDays(-2),
+            nowUtc.AddDays(-2).AddMinutes(30));
+
+        for (var index = 0; index < 8; index++)
+        {
+            await AddAppointmentAsync(
+                customer.Id,
+                setup,
+                AppointmentStatus.Completed,
+                nowUtc.AddDays(-3 - index),
+                nowUtc.AddDays(-3 - index).AddMinutes(30));
+        }
+
+        await AddBusinessReviewAsync(reviewedCompletedId, setup.BusinessId);
+        client.DefaultRequestHeaders.Authorization = new("Bearer", customerToken);
+
+        var allAppointments = await client.GetFromJsonAsync<CustomerAppointmentsPageResponse>(
+            "/api/customer/appointments?pageSize=50&sort=date_desc");
+        var upcomingAppointments = await client.GetFromJsonAsync<CustomerAppointmentsPageResponse>(
+            "/api/customer/appointments?view=upcoming&sort=date_asc");
+        var completedAppointments = await client.GetFromJsonAsync<CustomerAppointmentsPageResponse>(
+            "/api/customer/appointments?view=completed&sort=date_desc");
+        var secondPage = await client.GetFromJsonAsync<CustomerAppointmentsPageResponse>(
+            "/api/customer/appointments?page=2&pageSize=10&sort=date_desc");
+
+        allAppointments!.Page.PageSize.Should().Be(10);
+        allAppointments.Page.TotalItems.Should().Be(13);
+        allAppointments.Page.TotalPages.Should().Be(2);
+        allAppointments.Items.Should().HaveCount(10);
+        allAppointments.Summary.Total.Should().Be(13);
+        allAppointments.Summary.Pending.Should().Be(2);
+        allAppointments.Summary.Completed.Should().Be(9);
+        allAppointments.Items.First().Id.Should().Be(approvedId);
+        allAppointments.Items.Should().Contain(appointment =>
+            appointment.Id == cancelledId
+            && appointment.Status == AppointmentStatus.Cancelled.ToString());
+        allAppointments.Items.Should().OnlyContain(appointment =>
+            appointment.BusinessMainPhoto != null
+            && appointment.BusinessMainPhoto.ImageUrl == "/uploads/main.webp");
+
+        upcomingAppointments!.Items.Select(appointment => appointment.Id).Should()
+            .Equal(pendingId, secondPendingId, approvedId);
+        upcomingAppointments.Items.Should().OnlyContain(appointment =>
+            appointment.Status == "Pending" || appointment.Status == "Approved");
+        upcomingAppointments.Items.Should().OnlyContain(appointment => appointment.CanCancel);
+
+        completedAppointments!.Items.Should().OnlyContain(appointment =>
+            appointment.Status == AppointmentStatus.Completed.ToString());
+        completedAppointments.Page.TotalItems.Should().Be(9);
+        completedAppointments.Items.Should().ContainSingle(appointment =>
+            appointment.Id == reviewedCompletedId
+            && appointment.HasReview
+            && appointment.ReviewRating == 5
+            && !appointment.CanReview);
+
+        secondPage!.Items.Should().HaveCount(3);
     }
 
     [Fact]
@@ -1471,6 +1566,36 @@ public class AuthAndBusinessFlowTests : IClassFixture<RendezvousApiFactory>
         await dbContext.SaveChangesAsync();
     }
 
+    private async Task AddBusinessPhotosAsync(Guid businessId)
+    {
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        dbContext.BusinessPhotos.AddRange(
+            new BusinessPhoto
+            {
+                BusinessId = businessId,
+                ImageUrl = "/uploads/secondary.webp",
+                StorageKey = "secondary.webp",
+                ContentType = "image/webp",
+                FileSizeBytes = 100,
+                AltText = "Secondary photo",
+                SortOrder = 2
+            },
+            new BusinessPhoto
+            {
+                BusinessId = businessId,
+                ImageUrl = "/uploads/main.webp",
+                StorageKey = "main.webp",
+                ContentType = "image/webp",
+                FileSizeBytes = 100,
+                AltText = "Main photo",
+                SortOrder = 1
+            });
+
+        await dbContext.SaveChangesAsync();
+    }
+
     private async Task<IReadOnlyList<Guid>> AddAppointmentsAsync(
         Guid customerUserId,
         BookableBusinessSetup setup)
@@ -1577,11 +1702,35 @@ public class AuthAndBusinessFlowTests : IClassFixture<RendezvousApiFactory>
         string Status,
         DateTimeOffset StartsAtUtc);
 
+    private sealed record CustomerAppointmentsPageResponse(
+        IReadOnlyList<CustomerAppointmentListResponse> Items,
+        CustomerAppointmentSummaryResponse Summary,
+        CustomerAppointmentsPageMetadataResponse Page);
+
+    private sealed record CustomerAppointmentSummaryResponse(
+        int Total,
+        int Pending,
+        int Completed);
+
+    private sealed record CustomerAppointmentsPageMetadataResponse(
+        int Page,
+        int PageSize,
+        int TotalItems,
+        int TotalPages);
+
     private sealed record CustomerAppointmentListResponse(
         Guid Id,
         string Status,
         DateTimeOffset StartsAtUtc,
-        bool HasReview);
+        bool HasReview,
+        CustomerAppointmentBusinessPhotoResponse? BusinessMainPhoto,
+        decimal? ReviewRating,
+        bool CanCancel,
+        bool CanReview);
+
+    private sealed record CustomerAppointmentBusinessPhotoResponse(
+        string ImageUrl,
+        string AltText);
 
     private sealed record CustomerAppointmentReviewResponse(
         Guid Id,

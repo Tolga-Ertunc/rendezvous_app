@@ -15,6 +15,8 @@ namespace Rendezvous.Api.Controllers;
 [Route("api/customer/appointments")]
 public class CustomerAppointmentsController : ControllerBase
 {
+    private const int MaxCustomerAppointmentPageSize = 10;
+
     private readonly AppDbContext dbContext;
     private readonly AppointmentLifecycleService lifecycleService;
     private readonly AppointmentNotificationService notificationService;
@@ -30,10 +32,11 @@ public class CustomerAppointmentsController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<ActionResult<IReadOnlyList<CustomerAppointmentResponse>>> List(
-        [FromQuery] string? status,
-        [FromQuery] DateTimeOffset? fromUtc,
-        [FromQuery] DateTimeOffset? toUtc,
+    public async Task<ActionResult<CustomerAppointmentsPageResponse>> List(
+        [FromQuery] string? view,
+        [FromQuery] int? page,
+        [FromQuery] int? pageSize,
+        [FromQuery] string? sort,
         CancellationToken cancellationToken)
     {
         var userId = GetCurrentUserId();
@@ -42,23 +45,49 @@ public class CustomerAppointmentsController : ControllerBase
             return Unauthorized();
         }
 
+        if (!TryParseAppointmentView(view, out var appointmentView, out var viewErrorMessage))
+        {
+            return BadRequest(new { message = viewErrorMessage });
+        }
+
+        if (!TryParseAppointmentSort(sort, out var appointmentSort, out var sortErrorMessage))
+        {
+            return BadRequest(new { message = sortErrorMessage });
+        }
+
+        var nowUtc = DateTimeOffset.UtcNow;
+        var normalizedPage = Math.Max(page ?? 1, 1);
+        var normalizedPageSize = Math.Clamp(pageSize ?? MaxCustomerAppointmentPageSize, 1, MaxCustomerAppointmentPageSize);
+
         await lifecycleService.ProcessDueAppointmentsAsync(cancellationToken);
 
-        var appointmentsQuery = dbContext.Appointments
+        var customerAppointmentsQuery = dbContext.Appointments
             .AsNoTracking()
             .Where(appointment => appointment.CustomerUserId == userId.Value);
 
-        if (!TryApplyAppointmentFilters(
-            ref appointmentsQuery,
-            status,
-            fromUtc,
-            toUtc,
-            out var errorMessage))
+        var summary = new CustomerAppointmentSummaryResponse(
+            await customerAppointmentsQuery.CountAsync(cancellationToken),
+            await customerAppointmentsQuery.CountAsync(
+                appointment => appointment.Status == AppointmentStatus.Pending,
+                cancellationToken),
+            await customerAppointmentsQuery.CountAsync(
+                appointment => appointment.Status == AppointmentStatus.Completed,
+                cancellationToken));
+
+        var filteredAppointmentsQuery = ApplyAppointmentView(
+            customerAppointmentsQuery,
+            appointmentView);
+        var totalItems = await filteredAppointmentsQuery.CountAsync(cancellationToken);
+        var totalPages = CalculateTotalPages(totalItems, normalizedPageSize);
+
+        if (totalPages > 0 && normalizedPage > totalPages)
         {
-            return BadRequest(new { message = errorMessage });
+            normalizedPage = totalPages;
         }
 
-        return await appointmentsQuery
+        var rows = await ApplyAppointmentSort(filteredAppointmentsQuery, appointmentSort)
+            .Skip((normalizedPage - 1) * normalizedPageSize)
+            .Take(normalizedPageSize)
             .Join(
                 dbContext.Businesses.AsNoTracking(),
                 appointment => appointment.BusinessId,
@@ -79,19 +108,70 @@ public class CustomerAppointmentsController : ControllerBase
                 row => row.staffMember.UserId,
                 user => user.Id,
                 (row, staffUser) => new { row.appointment, row.business, row.service, staffUser })
-            .OrderBy(row => row.appointment.StartsAtUtc)
-            .Select(row => new CustomerAppointmentResponse(
+            .Select(row => new CustomerAppointmentListRow(
                 row.appointment.Id,
-                row.appointment.Status.ToString(),
+                row.appointment.Status,
                 row.appointment.StartsAtUtc,
                 row.appointment.EndsAtUtc,
                 row.business.Name,
                 row.service.Name,
-                ((row.staffUser.FirstName ?? string.Empty) + " " + (row.staffUser.LastName ?? string.Empty)).Trim(),
+                row.staffUser.FirstName,
+                row.staffUser.LastName,
                 row.appointment.PriceAmount,
                 row.appointment.CurrencyCode,
-                dbContext.BusinessReviews.Any(review => review.AppointmentId == row.appointment.Id)))
+                dbContext.BusinessReviews
+                    .Where(review => review.AppointmentId == row.appointment.Id)
+                    .Select(review => (decimal?)review.Rating)
+                    .FirstOrDefault(),
+                dbContext.BusinessPhotos
+                    .Where(photo => photo.BusinessId == row.business.Id && photo.ImageUrl != string.Empty)
+                    .OrderBy(photo => photo.SortOrder)
+                    .ThenBy(photo => photo.Id)
+                    .Select(photo => photo.ImageUrl)
+                    .FirstOrDefault(),
+                dbContext.BusinessPhotos
+                    .Where(photo => photo.BusinessId == row.business.Id && photo.ImageUrl != string.Empty)
+                    .OrderBy(photo => photo.SortOrder)
+                    .ThenBy(photo => photo.Id)
+                    .Select(photo => photo.AltText)
+                    .FirstOrDefault()))
             .ToListAsync(cancellationToken);
+
+        var items = rows
+            .Select(row =>
+            {
+                var hasReview = row.ReviewRating.HasValue;
+
+                return new CustomerAppointmentResponse(
+                    row.Id,
+                    row.Status.ToString(),
+                    row.StartsAtUtc,
+                    row.EndsAtUtc,
+                    row.BusinessName,
+                    row.ServiceName,
+                    UserNames.FormatFullName(row.StaffFirstName, row.StaffLastName),
+                    row.PriceAmount,
+                    row.CurrencyCode,
+                    hasReview,
+                    string.IsNullOrWhiteSpace(row.BusinessPhotoImageUrl)
+                        ? null
+                        : new CustomerAppointmentBusinessPhotoResponse(
+                            row.BusinessPhotoImageUrl,
+                            row.BusinessPhotoAltText ?? string.Empty),
+                    row.ReviewRating,
+                    CanBeCancelledByCustomer(row.Status, row.StartsAtUtc, nowUtc),
+                    row.Status == AppointmentStatus.Completed && !hasReview);
+            })
+            .ToList();
+
+        return new CustomerAppointmentsPageResponse(
+            items,
+            summary,
+            new CustomerAppointmentsPageMetadataResponse(
+                normalizedPage,
+                normalizedPageSize,
+                totalItems,
+                totalPages));
     }
 
     [HttpPost("{appointmentId:guid}/cancel")]
@@ -227,43 +307,106 @@ public class CustomerAppointmentsController : ControllerBase
             : null;
     }
 
-    private static bool TryApplyAppointmentFilters(
-        ref IQueryable<Appointment> query,
-        string? status,
-        DateTimeOffset? fromUtc,
-        DateTimeOffset? toUtc,
+    private static bool TryParseAppointmentView(
+        string? value,
+        out CustomerAppointmentView view,
         out string errorMessage)
     {
         errorMessage = string.Empty;
+        var normalizedValue = string.IsNullOrWhiteSpace(value)
+            ? "all"
+            : value.Trim().ToLowerInvariant();
 
-        if (fromUtc.HasValue && toUtc.HasValue && fromUtc > toUtc)
+        view = normalizedValue switch
         {
-            errorMessage = "fromUtc must be before toUtc.";
-            return false;
+            "all" => CustomerAppointmentView.All,
+            "upcoming" => CustomerAppointmentView.Upcoming,
+            "completed" => CustomerAppointmentView.Completed,
+            _ => CustomerAppointmentView.All
+        };
+
+        if (normalizedValue is "all" or "upcoming" or "completed")
+        {
+            return true;
         }
 
-        if (!string.IsNullOrWhiteSpace(status))
-        {
-            if (!Enum.TryParse<AppointmentStatus>(status, ignoreCase: true, out var appointmentStatus))
-            {
-                errorMessage = "Invalid appointment status.";
-                return false;
-            }
+        errorMessage = "Invalid appointment view.";
+        return false;
+    }
 
-            query = query.Where(appointment => appointment.Status == appointmentStatus);
+    private static bool TryParseAppointmentSort(
+        string? value,
+        out CustomerAppointmentSort sort,
+        out string errorMessage)
+    {
+        errorMessage = string.Empty;
+        var normalizedValue = string.IsNullOrWhiteSpace(value)
+            ? "date_desc"
+            : value.Trim().ToLowerInvariant();
+
+        sort = normalizedValue switch
+        {
+            "date_asc" => CustomerAppointmentSort.DateAscending,
+            "date_desc" => CustomerAppointmentSort.DateDescending,
+            _ => CustomerAppointmentSort.DateDescending
+        };
+
+        if (normalizedValue is "date_asc" or "date_desc")
+        {
+            return true;
         }
 
-        if (fromUtc.HasValue)
+        errorMessage = "Invalid appointment sort.";
+        return false;
+    }
+
+    private static IQueryable<Appointment> ApplyAppointmentView(
+        IQueryable<Appointment> query,
+        CustomerAppointmentView view)
+    {
+        return view switch
         {
-            query = query.Where(appointment => appointment.StartsAtUtc >= fromUtc.Value);
+            CustomerAppointmentView.Upcoming => query.Where(appointment =>
+                appointment.Status == AppointmentStatus.Pending
+                || appointment.Status == AppointmentStatus.Approved),
+            CustomerAppointmentView.Completed => query.Where(appointment =>
+                appointment.Status == AppointmentStatus.Completed),
+            _ => query
+        };
+    }
+
+    private static IOrderedQueryable<Appointment> ApplyAppointmentSort(
+        IQueryable<Appointment> query,
+        CustomerAppointmentSort sort)
+    {
+        return sort == CustomerAppointmentSort.DateAscending
+            ? query
+                .OrderBy(appointment => appointment.StartsAtUtc)
+                .ThenBy(appointment => appointment.Id)
+            : query
+                .OrderByDescending(appointment => appointment.StartsAtUtc)
+                .ThenByDescending(appointment => appointment.Id);
+    }
+
+    private static bool CanBeCancelledByCustomer(
+        AppointmentStatus status,
+        DateTimeOffset startsAtUtc,
+        DateTimeOffset nowUtc)
+    {
+        if (status == AppointmentStatus.Pending)
+        {
+            return true;
         }
 
-        if (toUtc.HasValue)
-        {
-            query = query.Where(appointment => appointment.StartsAtUtc <= toUtc.Value);
-        }
+        return status == AppointmentStatus.Approved
+            && startsAtUtc - nowUtc >= TimeSpan.FromHours(1);
+    }
 
-        return true;
+    private static int CalculateTotalPages(int totalItems, int pageSize)
+    {
+        return totalItems == 0
+            ? 0
+            : (int)Math.Ceiling(totalItems / (double)pageSize);
     }
 
     private static string? ValidateReviewRequest(CustomerAppointmentReviewRequest request)
@@ -300,6 +443,22 @@ public class CustomerAppointmentsController : ControllerBase
     }
 }
 
+public sealed record CustomerAppointmentsPageResponse(
+    IReadOnlyList<CustomerAppointmentResponse> Items,
+    CustomerAppointmentSummaryResponse Summary,
+    CustomerAppointmentsPageMetadataResponse Page);
+
+public sealed record CustomerAppointmentSummaryResponse(
+    int Total,
+    int Pending,
+    int Completed);
+
+public sealed record CustomerAppointmentsPageMetadataResponse(
+    int Page,
+    int PageSize,
+    int TotalItems,
+    int TotalPages);
+
 public sealed record CustomerAppointmentResponse(
     Guid Id,
     string Status,
@@ -310,7 +469,43 @@ public sealed record CustomerAppointmentResponse(
     string StaffDisplayName,
     decimal PriceAmount,
     string CurrencyCode,
-    bool HasReview);
+    bool HasReview,
+    CustomerAppointmentBusinessPhotoResponse? BusinessMainPhoto,
+    decimal? ReviewRating,
+    bool CanCancel,
+    bool CanReview);
+
+public sealed record CustomerAppointmentBusinessPhotoResponse(
+    string ImageUrl,
+    string AltText);
+
+internal sealed record CustomerAppointmentListRow(
+    Guid Id,
+    AppointmentStatus Status,
+    DateTimeOffset StartsAtUtc,
+    DateTimeOffset EndsAtUtc,
+    string BusinessName,
+    string ServiceName,
+    string? StaffFirstName,
+    string? StaffLastName,
+    decimal PriceAmount,
+    string CurrencyCode,
+    decimal? ReviewRating,
+    string? BusinessPhotoImageUrl,
+    string? BusinessPhotoAltText);
+
+internal enum CustomerAppointmentView
+{
+    All,
+    Upcoming,
+    Completed
+}
+
+internal enum CustomerAppointmentSort
+{
+    DateAscending,
+    DateDescending
+}
 
 public sealed record CustomerAppointmentDecisionResponse(
     Guid Id,
