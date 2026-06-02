@@ -29,6 +29,13 @@ export type AppointmentRequest = {
   currencyCode: string
 }
 
+export type StylePreview = {
+  previewId: string
+  imageUrl: string
+  prompt: string
+  isPlaceholder: boolean
+}
+
 export function getBookingAvailability(
   businessId: string,
   serviceId: string,
@@ -50,5 +57,25 @@ export function createAppointmentRequest(input: {
   return apiRequest<AppointmentRequest>("/booking/appointment-requests", {
     method: "POST",
     body: JSON.stringify(input),
+  })
+}
+
+export function generateStylePreview(input: {
+  businessId: string
+  serviceId: string
+  staffMemberId: string
+  image: File
+  prompt: string
+}) {
+  const formData = new FormData()
+  formData.append("businessId", input.businessId)
+  formData.append("serviceId", input.serviceId)
+  formData.append("staffMemberId", input.staffMemberId)
+  formData.append("image", input.image)
+  formData.append("prompt", input.prompt)
+
+  return apiRequest<StylePreview>("/booking/style-previews", {
+    method: "POST",
+    body: formData,
   })
 }

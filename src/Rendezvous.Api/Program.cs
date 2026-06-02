@@ -36,11 +36,13 @@ builder.Services
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection("Jwt"));
 builder.Services.Configure<EmailOptions>(builder.Configuration.GetSection("Email"));
 builder.Services.Configure<BusinessPhotoStorageOptions>(builder.Configuration.GetSection("Media"));
+builder.Services.Configure<StylePreviewOptions>(builder.Configuration.GetSection("StylePreview"));
 builder.Services.Configure<ResendClientOptions>(options =>
 {
     options.ApiToken = builder.Configuration["Email:Resend:ApiKey"] ?? string.Empty;
 });
 builder.Services.AddHttpClient<ResendClient>();
+builder.Services.AddHttpClient<StylePreviewGenerationService>();
 builder.Services.AddTransient<IResend, ResendClient>();
 if (builder.Environment.IsEnvironment("Testing"))
 {

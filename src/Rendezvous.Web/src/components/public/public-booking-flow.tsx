@@ -10,30 +10,42 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
+  ImageIcon,
   Plus,
+  RefreshCcw,
   ShoppingCart,
+  Sparkles,
+  Upload,
   UserRound,
+  WandSparkles,
   X,
 } from "lucide-react"
 
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
+import { Card, CardContent } from "@/components/ui/card"
 import {
   Dialog,
   DialogContent,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
+import { Textarea } from "@/components/ui/textarea"
 import { ApiError } from "@/lib/api-client"
 import { clearAuthTokens, getAccessToken } from "@/lib/auth-storage"
 import {
   createAppointmentRequest,
+  generateStylePreview,
   getBookingAvailability,
 } from "@/lib/booking-api"
 import type {
   AppointmentRequest,
   AvailabilitySlot,
   BookingAvailability,
+  StylePreview,
 } from "@/lib/booking-api"
 import type {
   PublicBusinessDetail,
@@ -42,7 +54,20 @@ import type {
 } from "@/lib/public-api"
 import { cn } from "@/lib/utils"
 
-type BookingStep = "services" | "time" | "professional" | "confirm" | "success"
+type BookingStep =
+  | "services"
+  | "time"
+  | "professional"
+  | "stylePreview"
+  | "confirm"
+  | "success"
+
+type StylePreviewDecision =
+  | "undecided"
+  | "create"
+  | "skipped"
+  | "used"
+  | "discarded"
 
 type PublicBookingFlowProps = {
   open: boolean
@@ -55,7 +80,16 @@ const stepItems: { id: Exclude<BookingStep, "success">; label: string }[] = [
   { id: "services", label: "Services" },
   { id: "time", label: "Select time" },
   { id: "professional", label: "Select professional" },
+  { id: "stylePreview", label: "Style preview" },
   { id: "confirm", label: "Confirm" },
+]
+
+const stylePreviewPresets = [
+  "Preset 1",
+  "Preset 2",
+  "Preset 3",
+  "Preset 4",
+  "Preset 5",
 ]
 
 export function PublicBookingFlow({
@@ -81,6 +115,15 @@ export function PublicBookingFlow({
   const [error, setError] = useState("")
   const [appointmentRequest, setAppointmentRequest] =
     useState<AppointmentRequest | null>(null)
+  const [stylePreviewDecision, setStylePreviewDecision] =
+    useState<StylePreviewDecision>("undecided")
+  const [stylePreviewImage, setStylePreviewImage] = useState<File | null>(null)
+  const [stylePreviewPrompt, setStylePreviewPrompt] = useState("")
+  const [stylePreviewResult, setStylePreviewResult] =
+    useState<StylePreview | null>(null)
+  const [stylePreviewError, setStylePreviewError] = useState("")
+  const [isGeneratingStylePreview, setIsGeneratingStylePreview] =
+    useState(false)
 
   const today = useMemo(
     () => getBusinessToday(business.timeZoneId),
@@ -120,6 +163,10 @@ export function PublicBookingFlow({
       ) ?? null,
     [selectedSlot, selectedStaffId]
   )
+  const stylePreviewImageUrl = useMemo(
+    () => (stylePreviewImage ? URL.createObjectURL(stylePreviewImage) : ""),
+    [stylePreviewImage]
+  )
   const selectedDateOption =
     dateOptions.find((dateOption) => dateOption.key === selectedDate) ??
     dateOptions[0]
@@ -127,6 +174,10 @@ export function PublicBookingFlow({
     business,
     selectedDateOption
   )
+  const canContinueStylePreview =
+    stylePreviewDecision === "skipped" ||
+    stylePreviewDecision === "used" ||
+    stylePreviewDecision === "discarded"
   const canContinue =
     step === "services"
       ? Boolean(selectedService)
@@ -134,9 +185,11 @@ export function PublicBookingFlow({
         ? Boolean(selectedSlot)
         : step === "professional"
           ? Boolean(selectedStaff)
-          : step === "confirm"
-            ? Boolean(selectedService && selectedSlot && selectedStaff)
-            : false
+          : step === "stylePreview"
+            ? canContinueStylePreview
+            : step === "confirm"
+              ? Boolean(selectedService && selectedSlot && selectedStaff)
+              : false
 
   useEffect(() => {
     if (!open) {
@@ -163,10 +216,24 @@ export function PublicBookingFlow({
       setAvailabilityByDate({})
       setError("")
       setAppointmentRequest(null)
+      setStylePreviewDecision("undecided")
+      setStylePreviewImage(null)
+      setStylePreviewPrompt("")
+      setStylePreviewResult(null)
+      setStylePreviewError("")
+      setIsGeneratingStylePreview(false)
     }, 0)
 
     return () => window.clearTimeout(resetTimeout)
   }, [business.services, business.timeZoneId, initialServiceId, onOpenChange, open, router])
+
+  useEffect(() => {
+    return () => {
+      if (stylePreviewImageUrl) {
+        URL.revokeObjectURL(stylePreviewImageUrl)
+      }
+    }
+  }, [stylePreviewImageUrl])
 
   useEffect(() => {
     if (!open || !selectedServiceId || step === "services" || step === "success") {
@@ -264,10 +331,29 @@ export function PublicBookingFlow({
       setStep("services")
     } else if (step === "professional") {
       setStep("time")
-    } else if (step === "confirm") {
+    } else if (step === "stylePreview") {
       setStep("professional")
+    } else if (step === "confirm") {
+      setStep("stylePreview")
     } else {
       onOpenChange(false)
+    }
+  }
+
+  function resetStylePreview() {
+    setStylePreviewDecision("undecided")
+    setStylePreviewImage(null)
+    setStylePreviewPrompt("")
+    setStylePreviewResult(null)
+    setStylePreviewError("")
+    setIsGeneratingStylePreview(false)
+  }
+
+  function invalidateGeneratedStylePreview() {
+    setStylePreviewResult(null)
+    setStylePreviewError("")
+    if (stylePreviewDecision !== "undecided" && stylePreviewDecision !== "skipped") {
+      setStylePreviewDecision("create")
     }
   }
 
@@ -278,6 +364,7 @@ export function PublicBookingFlow({
     setSelectedStaffId("")
     setAvailabilityByDate({})
     setError("")
+    resetStylePreview()
   }
 
   function handleDateSelect(dateKey: string) {
@@ -291,6 +378,12 @@ export function PublicBookingFlow({
     setSelectedSlotKey(getSlotKey(slot))
     setSelectedStaffId("")
     setError("")
+    resetStylePreview()
+  }
+
+  function handleStaffSelect(staffId: string) {
+    setSelectedStaffId(staffId)
+    resetStylePreview()
   }
 
   function handleContinue() {
@@ -305,8 +398,89 @@ export function PublicBookingFlow({
     } else if (step === "time") {
       setStep("professional")
     } else if (step === "professional") {
+      setStep("stylePreview")
+    } else if (step === "stylePreview") {
       setStep("confirm")
     }
+  }
+
+  function handleStartStylePreview() {
+    setStylePreviewDecision("create")
+    setStylePreviewError("")
+  }
+
+  function handleSkipStylePreview() {
+    setStylePreviewDecision("skipped")
+    setStylePreviewError("")
+    setStep("confirm")
+  }
+
+  function handleStylePreviewImageChange(file: File | null) {
+    setStylePreviewImage(file)
+    invalidateGeneratedStylePreview()
+  }
+
+  function handleStylePreviewPromptChange(prompt: string) {
+    setStylePreviewPrompt(prompt)
+    invalidateGeneratedStylePreview()
+  }
+
+  async function handleGenerateStylePreview() {
+    if (!selectedService || !selectedStaff || !stylePreviewImage) {
+      setStylePreviewError("Add a photo and prompt before generating a preview.")
+      return
+    }
+
+    const prompt = stylePreviewPrompt.trim()
+    if (!prompt) {
+      setStylePreviewError("Prompt is required.")
+      return
+    }
+
+    setIsGeneratingStylePreview(true)
+    setStylePreviewError("")
+
+    try {
+      const generated = await generateStylePreview({
+        businessId: business.id,
+        serviceId: selectedService.id,
+        staffMemberId: selectedStaff.staffMemberId,
+        image: stylePreviewImage,
+        prompt,
+      })
+
+      setStylePreviewResult(generated)
+      setStylePreviewDecision("create")
+    } catch (caughtError) {
+      if (caughtError instanceof ApiError && caughtError.status === 401) {
+        clearAuthTokens()
+        onOpenChange(false)
+        router.push("/register?reason=booking")
+        return
+      }
+
+      setStylePreviewResult(null)
+      setStylePreviewError("Style preview could not be generated.")
+    } finally {
+      setIsGeneratingStylePreview(false)
+    }
+  }
+
+  function handleUseStylePreview() {
+    if (!stylePreviewResult) {
+      return
+    }
+
+    setStylePreviewDecision("used")
+    setStylePreviewError("")
+    setStep("confirm")
+  }
+
+  function handleDiscardStylePreview() {
+    setStylePreviewDecision("discarded")
+    setStylePreviewResult(null)
+    setStylePreviewError("")
+    setStep("confirm")
   }
 
   async function handleConfirm() {
@@ -445,7 +619,24 @@ export function PublicBookingFlow({
                   selectedService={selectedService}
                   selectedSlot={selectedSlot}
                   selectedStaffId={selectedStaffId}
-                  onStaffSelect={setSelectedStaffId}
+                  onStaffSelect={handleStaffSelect}
+                />
+              ) : step === "stylePreview" ? (
+                <StylePreviewStep
+                  decision={stylePreviewDecision}
+                  image={stylePreviewImage}
+                  imageUrl={stylePreviewImageUrl}
+                  prompt={stylePreviewPrompt}
+                  result={stylePreviewResult}
+                  error={stylePreviewError}
+                  isGenerating={isGeneratingStylePreview}
+                  onStart={handleStartStylePreview}
+                  onSkip={handleSkipStylePreview}
+                  onImageChange={handleStylePreviewImageChange}
+                  onPromptChange={handleStylePreviewPromptChange}
+                  onGenerate={handleGenerateStylePreview}
+                  onUse={handleUseStylePreview}
+                  onDiscard={handleDiscardStylePreview}
                 />
               ) : step === "confirm" ? (
                 <ConfirmStep
@@ -454,6 +645,7 @@ export function PublicBookingFlow({
                   selectedDateOption={selectedDateOption}
                   selectedSlot={selectedSlot}
                   selectedStaff={selectedStaff}
+                  stylePreviewSelected={stylePreviewDecision === "used"}
                   error={error}
                 />
               ) : (
@@ -849,12 +1041,268 @@ function ProfessionalStep({
   )
 }
 
+function StylePreviewStep({
+  decision,
+  image,
+  imageUrl,
+  prompt,
+  result,
+  error,
+  isGenerating,
+  onStart,
+  onSkip,
+  onImageChange,
+  onPromptChange,
+  onGenerate,
+  onUse,
+  onDiscard,
+}: {
+  decision: StylePreviewDecision
+  image: File | null
+  imageUrl: string
+  prompt: string
+  result: StylePreview | null
+  error: string
+  isGenerating: boolean
+  onStart: () => void
+  onSkip: () => void
+  onImageChange: (file: File | null) => void
+  onPromptChange: (prompt: string) => void
+  onGenerate: () => void
+  onUse: () => void
+  onDiscard: () => void
+}) {
+  const hasGenerationInput = Boolean(image && prompt.trim())
+  const isCreateMode =
+    decision === "create" || decision === "used" || decision === "discarded"
+
+  return (
+    <div className="space-y-9">
+      <div className="space-y-3">
+        <h1 className="text-5xl font-extrabold leading-none tracking-normal md:text-6xl">
+          Style preview
+        </h1>
+        <p className="max-w-2xl text-lg leading-7 text-[#71717a]">
+          Add an optional haircut reference for your barber.
+        </p>
+      </div>
+
+      {decision === "undecided" || decision === "skipped" ? (
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Button
+            type="button"
+            className="h-20 justify-start rounded-lg bg-[#111111] px-6 text-left text-lg font-bold text-white hover:bg-[#27272a]"
+            onClick={onStart}
+          >
+            <Sparkles className="mr-3 size-5" aria-hidden="true" />
+            Yes, create a preview
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="h-20 justify-start rounded-lg border-[#d4d4d8] bg-white px-6 text-left text-lg font-bold text-[#111111] hover:bg-[#f4f4f5]"
+            onClick={onSkip}
+          >
+            Skip preview
+          </Button>
+        </div>
+      ) : null}
+
+      {isCreateMode ? (
+        <div className="space-y-6">
+          <div className="grid gap-5 lg:grid-cols-2">
+            <Card className="overflow-hidden border-[#e5e7eb] shadow-none">
+              <CardContent className="flex h-[360px] flex-col p-0">
+                <div className="flex h-14 items-center justify-between border-b border-[#e5e7eb] px-5">
+                  <div className="flex items-center gap-2 text-base font-bold">
+                    <Upload className="size-5 text-[#71717a]" aria-hidden="true" />
+                    Upload photo
+                  </div>
+                  {image ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="h-9 px-3 text-sm font-semibold text-[#71717a]"
+                      onClick={() => onImageChange(null)}
+                    >
+                      Remove
+                    </Button>
+                  ) : null}
+                </div>
+                <div className="relative flex min-h-0 flex-1 items-center justify-center bg-[#fafafa] p-5">
+                  {imageUrl ? (
+                    <div
+                      className="h-full w-full rounded-lg border border-[#e5e7eb] bg-cover bg-center"
+                      style={{ backgroundImage: `url(${imageUrl})` }}
+                      role="img"
+                      aria-label="Uploaded customer photo"
+                    />
+                  ) : (
+                    <Label className="flex h-full w-full cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-[#d4d4d8] bg-white text-center transition-colors hover:bg-[#f4f4f5]">
+                      <ImageIcon className="mb-4 size-10 text-[#71717a]" aria-hidden="true" />
+                      <span className="text-lg font-bold text-[#111111]">
+                        Upload one face photo
+                      </span>
+                      <span className="mt-2 text-sm text-[#71717a]">
+                        JPEG, PNG, or WebP up to 5MB
+                      </span>
+                      <Input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        className="sr-only"
+                        onChange={(event) =>
+                          onImageChange(event.target.files?.[0] ?? null)
+                        }
+                      />
+                    </Label>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="overflow-hidden border-[#e5e7eb] shadow-none">
+              <CardContent className="flex h-[360px] flex-col p-0">
+                <div className="flex h-14 items-center justify-between border-b border-[#e5e7eb] px-5">
+                  <div className="flex items-center gap-2 text-base font-bold">
+                    <WandSparkles className="size-5 text-[#71717a]" aria-hidden="true" />
+                    Output
+                  </div>
+                  {result?.isPlaceholder ? (
+                    <span className="text-sm font-semibold text-[#71717a]">
+                      Placeholder
+                    </span>
+                  ) : null}
+                </div>
+                <div className="flex min-h-0 flex-1 items-center justify-center bg-[#fafafa] p-5">
+                  {isGenerating ? (
+                    <div className="flex h-full w-full animate-pulse flex-col items-center justify-center rounded-lg border border-[#e5e7eb] bg-white text-center">
+                      <WandSparkles className="mb-4 size-10 text-[#71717a]" aria-hidden="true" />
+                      <p className="text-lg font-bold text-[#111111]">
+                        Generating preview
+                      </p>
+                    </div>
+                  ) : result ? (
+                    <div
+                      className="h-full w-full rounded-lg border border-[#e5e7eb] bg-cover bg-center"
+                      style={{ backgroundImage: `url(${result.imageUrl})` }}
+                      role="img"
+                      aria-label="Generated style preview"
+                    />
+                  ) : (
+                    <div className="flex h-full w-full flex-col items-center justify-center rounded-lg border border-dashed border-[#d4d4d8] bg-white text-center">
+                      <ImageIcon className="mb-4 size-10 text-[#71717a]" aria-hidden="true" />
+                      <p className="text-lg font-bold text-[#111111]">
+                        Preview will appear here
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {result?.isPlaceholder ? (
+            <Alert className="border-[#d4d4d8] bg-[#fafafa]">
+              <AlertDescription>
+                Style preview is running in placeholder mode for local testing.
+              </AlertDescription>
+            </Alert>
+          ) : null}
+
+          {error ? (
+            <Alert className="border-red-200 bg-red-50 text-red-700">
+              <AlertDescription className="text-red-700">{error}</AlertDescription>
+            </Alert>
+          ) : null}
+
+          <div className="space-y-4">
+            <div className="flex flex-wrap gap-3">
+              {stylePreviewPresets.map((preset) => (
+                <Button
+                  key={preset}
+                  type="button"
+                  variant="outline"
+                  className="h-11 rounded-full border-[#d4d4d8] bg-white px-5 text-base font-bold text-[#111111] hover:bg-[#f4f4f5]"
+                  onClick={() => onPromptChange(preset)}
+                >
+                  {preset}
+                </Button>
+              ))}
+            </div>
+            <Textarea
+              value={prompt}
+              maxLength={1000}
+              className="min-h-32 resize-none border-[#d4d4d8] bg-white text-base leading-7"
+              placeholder="Describe the haircut or beard style you want."
+              onChange={(event) => onPromptChange(event.target.value)}
+            />
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <Button
+              type="button"
+              variant="outline"
+              className="h-12 rounded-full border-[#d4d4d8] bg-white px-6 text-base font-bold text-[#111111] hover:bg-[#f4f4f5]"
+              onClick={onSkip}
+              disabled={isGenerating}
+            >
+              Skip preview
+            </Button>
+
+            {result ? (
+              <div className="flex flex-wrap items-center justify-end gap-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-12 rounded-full border-[#d4d4d8] bg-white px-6 text-base font-bold text-[#111111] hover:bg-[#f4f4f5]"
+                  onClick={onGenerate}
+                  disabled={!hasGenerationInput || isGenerating}
+                >
+                  <RefreshCcw className="mr-2 size-4" aria-hidden="true" />
+                  Regenerate
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-12 rounded-full border-[#d4d4d8] bg-white px-6 text-base font-bold text-[#111111] hover:bg-[#f4f4f5]"
+                  onClick={onDiscard}
+                  disabled={isGenerating}
+                >
+                  Discard preview
+                </Button>
+                <Button
+                  type="button"
+                  className="h-12 rounded-full bg-[#111111] px-7 text-base font-bold text-white hover:bg-[#27272a]"
+                  onClick={onUse}
+                  disabled={isGenerating}
+                >
+                  Use this preview
+                </Button>
+              </div>
+            ) : (
+              <Button
+                type="button"
+                className="h-12 rounded-full bg-[#111111] px-7 text-base font-bold text-white hover:bg-[#27272a] disabled:bg-[#a1a1aa]"
+                onClick={onGenerate}
+                disabled={!hasGenerationInput || isGenerating}
+              >
+                Generate preview
+              </Button>
+            )}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 function ConfirmStep({
   business,
   selectedService,
   selectedDateOption,
   selectedSlot,
   selectedStaff,
+  stylePreviewSelected,
   error,
 }: {
   business: PublicBusinessDetail
@@ -862,6 +1310,7 @@ function ConfirmStep({
   selectedDateOption: DateOption
   selectedSlot: AvailabilitySlot | null
   selectedStaff: { staffMemberId: string; displayName: string } | null
+  stylePreviewSelected: boolean
   error: string
 }) {
   return (
@@ -893,6 +1342,9 @@ function ConfirmStep({
           }
         />
         <SummaryRow label="Professional" value={selectedStaff?.displayName ?? ""} />
+        {stylePreviewSelected ? (
+          <SummaryRow label="Style preview" value="Selected" />
+        ) : null}
         <SummaryRow
           label="Duration"
           value={selectedService ? formatDuration(selectedService.durationMinutes) : ""}

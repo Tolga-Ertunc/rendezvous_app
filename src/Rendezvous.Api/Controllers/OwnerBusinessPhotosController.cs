@@ -26,11 +26,11 @@ public class OwnerBusinessPhotosController : ControllerBase
     }
 
     [HttpPost]
+    [Consumes("multipart/form-data")]
     [RequestSizeLimit(BusinessPhotoStorageService.MaxUploadRequestSizeBytes)]
     public async Task<ActionResult<OwnerBusinessPhotoResponse>> Upload(
         Guid businessId,
-        [FromForm] IFormFile file,
-        [FromForm] string? altText,
+        [FromForm] OwnerBusinessPhotoUploadRequest request,
         CancellationToken cancellationToken)
     {
         var userId = GetCurrentUserId();
@@ -52,10 +52,15 @@ public class OwnerBusinessPhotosController : ControllerBase
             return BadRequest(new { message = "A business can have up to 4 photos." });
         }
 
+        if (request.File is null)
+        {
+            return BadRequest(new { message = "Photo file is required." });
+        }
+
         var photo = new BusinessPhoto
         {
             BusinessId = businessId,
-            AltText = string.IsNullOrWhiteSpace(altText) ? string.Empty : altText.Trim(),
+            AltText = string.IsNullOrWhiteSpace(request.AltText) ? string.Empty : request.AltText.Trim(),
             SortOrder = currentPhotoCount
         };
 
@@ -64,7 +69,7 @@ public class OwnerBusinessPhotosController : ControllerBase
             var storedPhoto = await photoStorageService.SaveAsync(
                 businessId,
                 photo.Id,
-                file,
+                request.File,
                 cancellationToken);
 
             photo.StorageKey = storedPhoto.StorageKey;
@@ -215,6 +220,12 @@ public class OwnerBusinessPhotosController : ControllerBase
             photo.ContentType,
             photo.FileSizeBytes);
     }
+}
+
+public sealed class OwnerBusinessPhotoUploadRequest
+{
+    public IFormFile? File { get; init; }
+    public string? AltText { get; init; }
 }
 
 public sealed record OwnerBusinessPhotoOrderRequest(IReadOnlyList<Guid> PhotoIds);
