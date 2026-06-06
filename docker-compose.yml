@@ -31,6 +31,8 @@ services:
       Email__FromAddress: ${EMAIL_FROM_ADDRESS:-}
       Email__FromName: ${EMAIL_FROM_NAME:-Rendezvous}
       Email__Resend__ApiKey: ${RESEND_API_KEY:-}
+      StylePreview__ApiKey: ${STYLE_PREVIEW_API_KEY:-}
+      StylePreview__Model: ${STYLE_PREVIEW_MODEL:-gemini-2.5-flash-image}
       Media__UploadRoot: /var/lib/rendezvous/uploads
     depends_on:
       db:
@@ -51,6 +53,8 @@ services:
       Email__FromAddress: ${EMAIL_FROM_ADDRESS:-}
       Email__FromName: ${EMAIL_FROM_NAME:-Rendezvous}
       Email__Resend__ApiKey: ${RESEND_API_KEY:-}
+      StylePreview__ApiKey: ${STYLE_PREVIEW_API_KEY:-}
+      StylePreview__Model: ${STYLE_PREVIEW_MODEL:-gemini-2.5-flash-image}
       Media__UploadRoot: /var/lib/rendezvous/uploads
     volumes:
       - media-uploads:/var/lib/rendezvous/uploads
