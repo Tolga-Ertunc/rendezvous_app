@@ -6,7 +6,6 @@ import {
   ArrowLeft,
   Calendar,
   Check,
-  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Clock,
@@ -32,6 +31,13 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
 import { Textarea } from "@/components/ui/textarea"
 import { ApiError } from "@/lib/api-client"
@@ -85,6 +91,8 @@ const stepItems: { id: Exclude<BookingStep, "success">; label: string }[] = [
   { id: "confirm", label: "Confirm" },
 ]
 
+const NO_STAFF_PREFERENCE = "no-preference"
+
 const stylePreviewPresets = [
   {
     label: "Kısa Fade",
@@ -120,6 +128,9 @@ export function PublicBookingFlow({
   const [activeCategory, setActiveCategory] = useState("Featured")
   const [selectedDate, setSelectedDate] = useState(() =>
     formatDateKey(getBusinessToday(business.timeZoneId))
+  )
+  const [selectedStaffPreferenceId, setSelectedStaffPreferenceId] = useState(
+    NO_STAFF_PREFERENCE
   )
   const [selectedSlotKey, setSelectedSlotKey] = useState("")
   const [selectedStaffId, setSelectedStaffId] = useState("")
@@ -198,7 +209,11 @@ export function PublicBookingFlow({
     step === "services"
       ? Boolean(selectedService)
       : step === "time"
-        ? Boolean(selectedSlot)
+        ? Boolean(
+            selectedSlot &&
+              (selectedStaffPreferenceId === NO_STAFF_PREFERENCE ||
+                selectedStaff)
+          )
         : step === "professional"
           ? Boolean(selectedStaff)
           : step === "stylePreview"
@@ -227,6 +242,7 @@ export function PublicBookingFlow({
       setSelectedServiceId(initialService?.id ?? "")
       setActiveCategory(initialService?.categoryName ?? "Featured")
       setSelectedDate(formatDateKey(getBusinessToday(business.timeZoneId)))
+      setSelectedStaffPreferenceId(NO_STAFF_PREFERENCE)
       setSelectedSlotKey("")
       setSelectedStaffId("")
       setAvailabilityByDate({})
@@ -348,7 +364,11 @@ export function PublicBookingFlow({
     } else if (step === "professional") {
       setStep("time")
     } else if (step === "stylePreview") {
-      setStep("professional")
+      setStep(
+        selectedStaffPreferenceId === NO_STAFF_PREFERENCE
+          ? "professional"
+          : "time"
+      )
     } else if (step === "confirm") {
       setStep("stylePreview")
     } else {
@@ -376,6 +396,7 @@ export function PublicBookingFlow({
   function handleServiceSelect(service: PublicBusinessService) {
     setSelectedServiceId(service.id)
     setActiveCategory(service.categoryName || "Featured")
+    setSelectedStaffPreferenceId(NO_STAFF_PREFERENCE)
     setSelectedSlotKey("")
     setSelectedStaffId("")
     setAvailabilityByDate({})
@@ -390,9 +411,24 @@ export function PublicBookingFlow({
     setError("")
   }
 
+  function handleStaffPreferenceChange(staffPreferenceId: string) {
+    setSelectedStaffPreferenceId(staffPreferenceId)
+    setSelectedSlotKey("")
+    setSelectedStaffId("")
+    setError("")
+    resetStylePreview()
+  }
+
   function handleSlotSelect(slot: AvailabilitySlot) {
     setSelectedSlotKey(getSlotKey(slot))
-    setSelectedStaffId("")
+    setSelectedStaffId(
+      selectedStaffPreferenceId === NO_STAFF_PREFERENCE
+        ? ""
+        : slot.staffMembers.find(
+            (staffMember) =>
+              staffMember.staffMemberId === selectedStaffPreferenceId
+          )?.staffMemberId ?? ""
+    )
     setError("")
     resetStylePreview()
   }
@@ -412,7 +448,11 @@ export function PublicBookingFlow({
     if (step === "services") {
       setStep("time")
     } else if (step === "time") {
-      setStep("professional")
+      setStep(
+        selectedStaffPreferenceId === NO_STAFF_PREFERENCE
+          ? "professional"
+          : "stylePreview"
+      )
     } else if (step === "professional") {
       setStep("stylePreview")
     } else if (step === "stylePreview") {
@@ -625,11 +665,12 @@ export function PublicBookingFlow({
                   selectedDate={selectedDate}
                   selectedDateOption={selectedDateOption}
                   selectedSlotKey={selectedSlotKey}
-                  selectedStaffName={selectedStaff?.displayName ?? ""}
+                  selectedStaffPreferenceId={selectedStaffPreferenceId}
                   availability={availability}
                   isClosed={isClosedSelectedDate}
                   isLoading={isLoadingAvailability}
                   error={error}
+                  onStaffPreferenceChange={handleStaffPreferenceChange}
                   onDateSelect={handleDateSelect}
                   onSlotSelect={handleSlotSelect}
                 />
@@ -835,11 +876,12 @@ function TimeStep({
   selectedDate,
   selectedDateOption,
   selectedSlotKey,
-  selectedStaffName,
+  selectedStaffPreferenceId,
   availability,
   isClosed,
   isLoading,
   error,
+  onStaffPreferenceChange,
   onDateSelect,
   onSlotSelect,
 }: {
@@ -849,15 +891,33 @@ function TimeStep({
   selectedDate: string
   selectedDateOption: DateOption
   selectedSlotKey: string
-  selectedStaffName: string
+  selectedStaffPreferenceId: string
   availability: BookingAvailability | null
   isClosed: boolean
   isLoading: boolean
   error: string
+  onStaffPreferenceChange: (staffPreferenceId: string) => void
   onDateSelect: (dateKey: string) => void
   onSlotSelect: (slot: AvailabilitySlot) => void
 }) {
-  const slots = availability?.slots ?? []
+  const allSlots = availability?.slots ?? []
+  const hasStaffPreference = selectedStaffPreferenceId !== NO_STAFF_PREFERENCE
+  const slots = hasStaffPreference
+    ? allSlots.filter((slot) =>
+        slot.staffMembers.some(
+          (staffMember) =>
+            staffMember.staffMemberId === selectedStaffPreferenceId
+        )
+      )
+    : allSlots
+  const emptyStaffMembers = hasStaffPreference
+    ? business.staffMembers.filter(
+        (staffMember) => staffMember.id === selectedStaffPreferenceId
+      )
+    : business.staffMembers
+  const emptyMessage = hasStaffPreference
+    ? "Selected professional has no available times on this date."
+    : `${business.name} has no available times on this date.`
 
   return (
     <div className="space-y-9">
@@ -865,14 +925,25 @@ function TimeStep({
         Select time
       </h1>
       <div className="flex items-center justify-between gap-4">
-        <button
-          type="button"
-          className="inline-flex h-12 items-center gap-3 rounded-full border border-[#e5e7eb] bg-white px-4 text-base font-semibold text-[#111111]"
+        <Select
+          value={selectedStaffPreferenceId}
+          onValueChange={onStaffPreferenceChange}
         >
-          <UserRound className="size-5" aria-hidden="true" />
-          {selectedStaffName || "No preference"}
-          <ChevronDown className="size-4" aria-hidden="true" />
-        </button>
+          <SelectTrigger className="h-12 min-w-0 flex-1 rounded-full border-[#e5e7eb] bg-white px-4 text-base font-semibold text-[#111111] shadow-none sm:max-w-80">
+            <span className="flex min-w-0 items-center gap-3">
+              <UserRound className="size-5 shrink-0" aria-hidden="true" />
+              <SelectValue />
+            </span>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={NO_STAFF_PREFERENCE}>No preference</SelectItem>
+            {business.staffMembers.map((staffMember) => (
+              <SelectItem key={staffMember.id} value={staffMember.id}>
+                {staffMember.displayName}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <Button
           type="button"
           variant="outline"
@@ -946,8 +1017,8 @@ function TimeStep({
         <p className="text-base text-[#71717a]">Loading available times.</p>
       ) : slots.length === 0 ? (
         <EmptyAvailability
-          staffMembers={business.staffMembers}
-          message={`${business.name} has no available times on this date.`}
+          staffMembers={emptyStaffMembers}
+          message={emptyMessage}
         />
       ) : (
         <div className="grid gap-3">
