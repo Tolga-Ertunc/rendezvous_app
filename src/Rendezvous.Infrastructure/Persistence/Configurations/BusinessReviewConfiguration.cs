@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Rendezvous.Domain.Appointments;
 using Rendezvous.Domain.Businesses;
+using Rendezvous.Infrastructure.Identity;
 
 namespace Rendezvous.Infrastructure.Persistence.Configurations;
 
@@ -36,8 +37,14 @@ public class BusinessReviewConfiguration : IEntityTypeConfiguration<BusinessRevi
             .HasForeignKey(review => review.AppointmentId)
             .OnDelete(DeleteBehavior.Restrict);
 
+        builder.HasOne<ApplicationUser>()
+            .WithMany()
+            .HasForeignKey(review => review.CustomerUserId)
+            .OnDelete(DeleteBehavior.Restrict);
+
         builder.HasIndex(review => new { review.BusinessId, review.IsPublic, review.CreatedAtUtc });
         builder.HasIndex(review => review.AppointmentId)
             .IsUnique();
+        builder.HasIndex(review => review.CustomerUserId);
     }
 }

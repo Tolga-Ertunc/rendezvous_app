@@ -336,6 +336,7 @@ public class AuthController : ControllerBase
             user.FirstName ?? string.Empty,
             user.LastName ?? string.Empty,
             UserNames.FormatFullName(user.FirstName, user.LastName),
+            ProfilePhotoUrls.Build(user.ProfilePhotoId),
             roles.OrderBy(role => role).ToList(),
             memberships);
     }
@@ -383,6 +384,7 @@ public class AuthController : ControllerBase
             user.FirstName ?? string.Empty,
             user.LastName ?? string.Empty,
             UserNames.FormatFullName(user.FirstName, user.LastName),
+            ProfilePhotoUrls.Build(user.ProfilePhotoId),
             roles.OrderBy(role => role).ToList());
 
         return new AuthTokenResponse(
@@ -464,6 +466,7 @@ public sealed record AuthenticatedUserResponse(
     string FirstName,
     string LastName,
     string FullName,
+    string? ProfilePhotoUrl,
     IReadOnlyList<string> Roles);
 
 public sealed record CurrentUserResponse(
@@ -473,6 +476,7 @@ public sealed record CurrentUserResponse(
     string FirstName,
     string LastName,
     string FullName,
+    string? ProfilePhotoUrl,
     IReadOnlyList<string> Roles,
     IReadOnlyList<CurrentUserBusinessMembershipResponse> BusinessMemberships);
 

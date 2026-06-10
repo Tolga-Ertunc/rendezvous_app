@@ -22,7 +22,10 @@ type ProtectedPageProps = {
   description: string
   shellVariant?: "default" | "profile"
   authorize?: (user: CurrentUser) => boolean
-  children: (context: { user: CurrentUser }) => ReactNode
+  children: (context: {
+    user: CurrentUser
+    onUserChange: (user: CurrentUser) => void
+  }) => ReactNode
 }
 
 export function ProtectedPage({
@@ -129,7 +132,7 @@ export function ProtectedPage({
       description={description}
       variant={shellVariant}
     >
-      {children({ user })}
+      {children({ user, onUserChange: setUser })}
     </DashboardShell>
   )
 }

@@ -17,7 +17,16 @@ public class ApplicationUserConfiguration : IEntityTypeConfiguration<Application
         builder.Property(user => user.LastName)
             .HasMaxLength(UserNames.MaxNameLength);
 
+        builder.Property(user => user.ProfilePhotoStorageKey)
+            .HasMaxLength(512);
+
+        builder.Property(user => user.ProfilePhotoContentType)
+            .HasMaxLength(100);
+
         builder.HasIndex(user => user.PublicNumber)
+            .IsUnique();
+
+        builder.HasIndex(user => user.ProfilePhotoId)
             .IsUnique();
 
         builder.ToTable(table =>

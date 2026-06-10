@@ -8,6 +8,7 @@ export type AuthenticatedUser = {
   firstName: string
   lastName: string
   fullName: string
+  profilePhotoUrl: string | null
   roles: string[]
 }
 
@@ -124,6 +125,7 @@ export type BusinessReview = {
   id: string
   customerName: string
   customerInitial: string
+  customerProfilePhotoUrl?: string | null
   rating: number
   comment: string
   createdAtUtc: string
@@ -512,6 +514,16 @@ export async function logout() {
 
 export function getCurrentUser() {
   return apiRequest<CurrentUser>("/auth/me")
+}
+
+export function uploadProfilePhoto(file: File) {
+  const formData = new FormData()
+  formData.append("file", file)
+
+  return apiRequest<CurrentUser>("/profile/photo", {
+    method: "POST",
+    body: formData,
+  })
 }
 
 export function getOwnerBusinesses() {

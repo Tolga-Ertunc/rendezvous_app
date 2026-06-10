@@ -104,6 +104,7 @@ public class BookingAvailabilityController : ControllerBase
                     StaffMemberId = row.staffMember.Id,
                     FirstName = user.FirstName ?? string.Empty,
                     LastName = user.LastName ?? string.Empty,
+                    user.ProfilePhotoId,
                     row.workingHour.StartsAt,
                     row.workingHour.EndsAt
                 })
@@ -114,6 +115,7 @@ public class BookingAvailabilityController : ControllerBase
             .Select(row => new StaffWorkingRow(
                 row.StaffMemberId,
                 UserNames.FormatFullName(row.FirstName, row.LastName),
+                row.ProfilePhotoId,
                 row.StartsAt,
                 row.EndsAt))
             .ToList();
@@ -222,7 +224,8 @@ public class BookingAvailabilityController : ControllerBase
 
                 staffMembers.Add(new AvailableStaffResponse(
                     staffWorkingRow.StaffMemberId,
-                    staffWorkingRow.DisplayName));
+                    staffWorkingRow.DisplayName,
+                    ProfilePhotoUrls.Build(staffWorkingRow.ProfilePhotoId)));
             }
         }
 
@@ -272,6 +275,7 @@ public class BookingAvailabilityController : ControllerBase
     private sealed record StaffWorkingRow(
         Guid StaffMemberId,
         string DisplayName,
+        Guid? ProfilePhotoId,
         TimeOnly StartsAt,
         TimeOnly EndsAt);
 
@@ -302,4 +306,5 @@ public sealed record AvailabilitySlotResponse(
 
 public sealed record AvailableStaffResponse(
     Guid StaffMemberId,
-    string DisplayName);
+    string DisplayName,
+    string? ProfilePhotoUrl);

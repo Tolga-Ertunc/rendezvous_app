@@ -33,19 +33,27 @@ export default function ProfilePage() {
       description="Manage your account identity and workspace access."
       shellVariant="profile"
     >
-      {({ user }) => <ProfileLanding user={user} />}
+      {({ user, onUserChange }) => (
+        <ProfileLanding user={user} onUserChange={onUserChange} />
+      )}
     </ProtectedPage>
   )
 }
 
-function ProfileLanding({ user }: { user: CurrentUser }) {
+function ProfileLanding({
+  user,
+  onUserChange,
+}: {
+  user: CurrentUser
+  onUserChange: (user: CurrentUser) => void
+}) {
   const isEmployee = hasActiveMembership(user, "Employee")
   const isOwner = hasActiveMembership(user, "Owner")
   const isAdmin = user.roles.includes("Admin")
 
   return (
     <div className="grid gap-8">
-      <AccountCard user={user} />
+      <AccountCard user={user} onUserChange={onUserChange} />
 
       <section className="space-y-4">
         <div>

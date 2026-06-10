@@ -3,6 +3,7 @@ import { apiRequest } from "@/lib/api-client"
 export type AvailableStaff = {
   staffMemberId: string
   displayName: string
+  profilePhotoUrl: string | null
 }
 
 export type AvailabilitySlot = {

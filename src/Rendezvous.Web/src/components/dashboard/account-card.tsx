@@ -1,11 +1,28 @@
+"use client"
+
+import { useRef, useState } from "react"
+import { Camera, Loader2 } from "lucide-react"
+
+import { ApiError } from "@/lib/api-client"
 import { Badge } from "@/components/ui/badge"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
-import type { CurrentUser } from "@/lib/auth-api"
+import { uploadProfilePhoto, type CurrentUser } from "@/lib/auth-api"
 import { cn } from "@/lib/utils"
 
-export function AccountCard({ user }: { user: CurrentUser }) {
+export function AccountCard({
+  user,
+  onUserChange,
+}: {
+  user: CurrentUser
+  onUserChange?: (user: CurrentUser) => void
+}) {
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [isUploading, setIsUploading] = useState(false)
+  const [uploadError, setUploadError] = useState("")
   const displayName = user.fullName.trim()
   const isOwner = hasActiveMembership(user, "Owner")
   const isEmployee = hasActiveMembership(user, "Employee")
@@ -14,15 +31,70 @@ export function AccountCard({ user }: { user: CurrentUser }) {
     isEmployee ? "Employee workspace" : null,
   ].filter(Boolean)
 
+  async function handlePhotoChange(file: File | null) {
+    if (!file) {
+      return
+    }
+
+    setIsUploading(true)
+    setUploadError("")
+
+    try {
+      const updatedUser = await uploadProfilePhoto(file)
+      onUserChange?.(updatedUser)
+    } catch (error) {
+      setUploadError(getUploadErrorMessage(error))
+    } finally {
+      setIsUploading(false)
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ""
+      }
+    }
+  }
+
   return (
     <Card className="border-[#e5e7eb] bg-white shadow-sm">
       <CardContent className="p-6">
         <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-6">
-          <Avatar className="size-20 border border-[#cfe7c7] bg-[#f4fbf1]">
-            <AvatarFallback className="bg-[#f4fbf1] text-xl font-bold text-[#4f9d3a]">
-              {getAvatarInitials(user)}
-            </AvatarFallback>
-          </Avatar>
+          <div className="group relative size-20 shrink-0">
+            <Avatar className="size-20 border border-[#cfe7c7] bg-[#f4fbf1]">
+              {user.profilePhotoUrl ? (
+                <AvatarImage
+                  src={user.profilePhotoUrl}
+                  alt={`${displayName || user.email} profile photo`}
+                  className="object-cover object-center"
+                />
+              ) : null}
+              <AvatarFallback className="bg-[#f4fbf1] text-xl font-bold text-[#4f9d3a]">
+                {getAvatarInitials(user)}
+              </AvatarFallback>
+            </Avatar>
+            <Button
+              type="button"
+              variant="secondary"
+              size="icon"
+              className="absolute inset-0 size-20 rounded-full border border-[#111111]/10 bg-[#111111]/70 text-white opacity-0 transition-opacity hover:bg-[#111111]/80 hover:text-white focus-visible:opacity-100 group-hover:opacity-100"
+              disabled={isUploading}
+              aria-label="Change profile photo"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              {isUploading ? (
+                <Loader2 className="size-5 animate-spin" aria-hidden="true" />
+              ) : (
+                <Camera className="size-5" aria-hidden="true" />
+              )}
+            </Button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              className="sr-only"
+              disabled={isUploading}
+              onChange={(event) => {
+                void handlePhotoChange(event.target.files?.[0] ?? null)
+              }}
+            />
+          </div>
 
           <div className="min-w-0 space-y-3">
             <div className="min-w-0 space-y-1">
@@ -51,6 +123,12 @@ export function AccountCard({ user }: { user: CurrentUser }) {
             ) : null}
           </div>
         </div>
+
+        {uploadError ? (
+          <Alert className="mt-5 border-[#fecaca] bg-[#fef2f2] text-[#991b1b]">
+            <AlertDescription>{uploadError}</AlertDescription>
+          </Alert>
+        ) : null}
 
         <Separator className="my-6" />
 
@@ -145,4 +223,21 @@ function getAvatarInitials(user: CurrentUser) {
   const emailName = user.email.split("@")[0]
 
   return (emailName[0] ?? "U").toUpperCase()
+}
+
+function getUploadErrorMessage(error: unknown) {
+  if (error instanceof ApiError && isApiErrorBody(error.body)) {
+    return error.body.message
+  }
+
+  return "Profile photo could not be uploaded."
+}
+
+function isApiErrorBody(body: unknown): body is { message: string } {
+  return (
+    typeof body === "object" &&
+    body !== null &&
+    "message" in body &&
+    typeof body.message === "string"
+  )
 }

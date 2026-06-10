@@ -5,6 +5,7 @@ public class BusinessReview
     public Guid Id { get; set; } = Guid.NewGuid();
     public Guid BusinessId { get; set; }
     public Guid? AppointmentId { get; set; }
+    public Guid? CustomerUserId { get; set; }
     public string CustomerName { get; set; } = string.Empty;
     public string CustomerInitial { get; set; } = string.Empty;
     public decimal Rating { get; set; }

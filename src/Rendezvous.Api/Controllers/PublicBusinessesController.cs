@@ -252,7 +252,8 @@ public class PublicBusinessesController : ControllerBase
                 {
                     staffMember.Id,
                     FirstName = user.FirstName ?? string.Empty,
-                    LastName = user.LastName ?? string.Empty
+                    LastName = user.LastName ?? string.Empty,
+                    user.ProfilePhotoId
                 })
             .OrderBy(row => row.FirstName)
             .ThenBy(row => row.LastName)
@@ -260,7 +261,8 @@ public class PublicBusinessesController : ControllerBase
         var staffMemberResponses = staffMembers
             .Select(staffMember => new PublicBusinessStaffMemberResponse(
                 staffMember.Id,
-                UserNames.FormatFullName(staffMember.FirstName, staffMember.LastName)))
+                UserNames.FormatFullName(staffMember.FirstName, staffMember.LastName),
+                ProfilePhotoUrls.Build(staffMember.ProfilePhotoId)))
             .ToList();
 
         var photos = await dbContext.BusinessPhotos
@@ -274,18 +276,34 @@ public class PublicBusinessesController : ControllerBase
                 photo.SortOrder))
             .ToListAsync(cancellationToken);
 
-        var reviews = await dbContext.BusinessReviews
-            .AsNoTracking()
-            .Where(review => review.BusinessId == id && review.IsPublic)
-            .OrderByDescending(review => review.CreatedAtUtc)
+        var reviewRows = await (
+                from review in dbContext.BusinessReviews.AsNoTracking()
+                where review.BusinessId == id && review.IsPublic
+                join user in dbContext.Users.AsNoTracking()
+                    on review.CustomerUserId equals user.Id into userRows
+                from user in userRows.DefaultIfEmpty()
+                orderby review.CreatedAtUtc descending
+                select new
+                {
+                    review.Id,
+                    review.CustomerName,
+                    review.CustomerInitial,
+                    review.Rating,
+                    review.Comment,
+                    review.CreatedAtUtc,
+                    CustomerProfilePhotoId = user == null ? null : user.ProfilePhotoId
+                })
+            .ToListAsync(cancellationToken);
+        var reviews = reviewRows
             .Select(review => new PublicBusinessReviewResponse(
                 review.Id,
                 review.CustomerName,
                 review.CustomerInitial,
                 review.Rating,
                 review.Comment,
-                review.CreatedAtUtc))
-            .ToListAsync(cancellationToken);
+                review.CreatedAtUtc,
+                ProfilePhotoUrls.Build(review.CustomerProfilePhotoId)))
+            .ToList();
 
         var reviewSummary = reviews.Count == 0
             ? new PublicBusinessReviewSummaryResponse(0, 0)
@@ -431,7 +449,8 @@ public sealed record PublicBusinessWorkingHourResponse(
 
 public sealed record PublicBusinessStaffMemberResponse(
     Guid Id,
-    string DisplayName);
+    string DisplayName,
+    string? ProfilePhotoUrl);
 
 public sealed record PublicBusinessPhotoResponse(
     Guid Id,
@@ -449,4 +468,5 @@ public sealed record PublicBusinessReviewResponse(
     string CustomerInitial,
     decimal Rating,
     string Comment,
-    DateTimeOffset CreatedAtUtc);
+    DateTimeOffset CreatedAtUtc,
+    string? CustomerProfilePhotoUrl);

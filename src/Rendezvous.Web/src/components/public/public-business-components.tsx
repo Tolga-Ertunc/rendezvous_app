@@ -21,7 +21,7 @@ import {
   Star,
 } from "lucide-react"
 
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { PublicBookingFlow } from "@/components/public/public-booking-flow"
@@ -577,6 +577,13 @@ function TeamSection({ business }: { business: PublicBusinessDetail }) {
           <div key={staffMember.id} className="space-y-4 text-center">
             <div className="relative mx-auto size-40 rounded-full border border-[#e5e7eb] bg-[#f1f2f5]">
               <Avatar className="size-full bg-[#f1f2f5]">
+                {staffMember.profilePhotoUrl ? (
+                  <AvatarImage
+                    src={staffMember.profilePhotoUrl}
+                    alt={`${staffMember.displayName} profile photo`}
+                    className="object-cover object-center"
+                  />
+                ) : null}
                 <AvatarFallback className="text-5xl text-[#635bff]">
                   {getInitial(staffMember.displayName)}
                 </AvatarFallback>
@@ -666,6 +673,13 @@ function ReviewItem({
     <article className="space-y-5">
       <div className="flex items-center gap-4">
         <Avatar className="size-20 bg-[#efefff]">
+          {review.customerProfilePhotoUrl ? (
+            <AvatarImage
+              src={review.customerProfilePhotoUrl}
+              alt={`${review.customerName} profile photo`}
+              className="object-cover object-center"
+            />
+          ) : null}
           <AvatarFallback className="text-3xl text-[#635bff]">
             {review.customerInitial || getInitial(review.customerName)}
           </AvatarFallback>

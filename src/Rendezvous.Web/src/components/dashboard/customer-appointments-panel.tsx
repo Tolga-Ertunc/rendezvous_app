@@ -373,14 +373,24 @@ export function CustomerAppointmentsPanel() {
                     <TableCell className="text-center">
                       <DateTimeCell startsAtUtc={appointment.startsAtUtc} />
                     </TableCell>
-                    <TableCell className="text-center">
+                    <TableCell>
                       <BusinessCell appointment={appointment} />
                     </TableCell>
                     <TableCell className="text-center font-medium text-[#111111]">
-                      {appointment.serviceName || "Not set"}
+                      <span
+                        className="block truncate"
+                        title={appointment.serviceName || "Not set"}
+                      >
+                        {appointment.serviceName || "Not set"}
+                      </span>
                     </TableCell>
                     <TableCell className="text-center text-[#3f3f46]">
-                      {appointment.staffDisplayName || "Not set"}
+                      <span
+                        className="block truncate"
+                        title={appointment.staffDisplayName || "Not set"}
+                      >
+                        {appointment.staffDisplayName || "Not set"}
+                      </span>
                     </TableCell>
                     <TableCell className="pr-3 text-center font-semibold text-[#111111]">
                       {formatPrice(
@@ -563,8 +573,8 @@ function BusinessCell({ appointment }: { appointment: CustomerAppointment }) {
   const photo = appointment.businessMainPhoto
 
   return (
-    <div className="mx-auto flex w-fit max-w-full items-center justify-center gap-3">
-      <Avatar className="size-12 rounded-md border border-[#e5e7eb] bg-[#fafafa]">
+    <div className="mx-auto flex w-[250px] max-w-full items-center justify-start gap-3">
+      <Avatar className="size-12 shrink-0 rounded-md border border-[#e5e7eb] bg-[#fafafa]">
         {photo ? (
           <AvatarImage
             src={photo.imageUrl}
@@ -577,9 +587,9 @@ function BusinessCell({ appointment }: { appointment: CustomerAppointment }) {
           </AvatarFallback>
         )}
       </Avatar>
-      <div className="min-w-0">
+      <div className="min-w-0 flex-1">
         <p
-          className="max-w-[210px] truncate font-semibold text-[#111111]"
+          className="truncate font-semibold text-[#111111]"
           title={appointment.businessName}
         >
           {truncateBusinessName(appointment.businessName)}

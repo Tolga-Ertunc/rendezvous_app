@@ -274,6 +274,7 @@ public class CustomerAppointmentsController : ControllerBase
         {
             BusinessId = appointment.BusinessId,
             AppointmentId = appointment.Id,
+            CustomerUserId = appointment.CustomerUserId,
             CustomerName = customerName,
             CustomerInitial = CreateCustomerInitial(customerName),
             Rating = request.Rating,

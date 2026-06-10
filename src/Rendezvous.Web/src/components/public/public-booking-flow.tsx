@@ -22,7 +22,7 @@ import {
 } from "lucide-react"
 
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import {
@@ -86,11 +86,26 @@ const stepItems: { id: Exclude<BookingStep, "success">; label: string }[] = [
 ]
 
 const stylePreviewPresets = [
-  "Preset 1",
-  "Preset 2",
-  "Preset 3",
-  "Preset 4",
-  "Preset 5",
+  {
+    label: "Kısa Fade",
+    prompt: "Kısa fade, üstler doğal ve dokulu kalsın.",
+  },
+  {
+    label: "Katlı Kesim",
+    prompt: "Orta uzunlukta katlı kesim, önler hafif dağınık olsun.",
+  },
+  {
+    label: "Klasik Kesim",
+    prompt: "Klasik yanlar kısa, üstler taranabilir uzunlukta kalsın.",
+  },
+  {
+    label: "Modern Crop",
+    prompt: "Modern crop kesim, net çizgiler ve doğal doku.",
+  },
+  {
+    label: "Düşük Fade",
+    prompt: "Uzun üst, düşük fade ve temiz ense geçişi.",
+  },
 ]
 
 export function PublicBookingFlow({
@@ -1009,6 +1024,13 @@ function ProfessionalStep({
               >
                 <div className="flex min-w-0 items-center gap-5">
                   <Avatar className="size-20 bg-[#f1f2f5]">
+                    {staffMember.profilePhotoUrl ? (
+                      <AvatarImage
+                        src={staffMember.profilePhotoUrl}
+                        alt={`${staffMember.displayName} profile photo`}
+                        className="object-cover object-center"
+                      />
+                    ) : null}
                     <AvatarFallback className="text-2xl font-bold text-[#635bff]">
                       {getInitial(staffMember.displayName)}
                     </AvatarFallback>
@@ -1234,13 +1256,13 @@ function StylePreviewStep({
             <div className="flex flex-wrap gap-3">
               {stylePreviewPresets.map((preset) => (
                 <Button
-                  key={preset}
+                  key={preset.label}
                   type="button"
                   variant="outline"
                   className="h-11 rounded-full border-[#d4d4d8] bg-white px-5 text-base font-bold text-[#111111] hover:bg-[#f4f4f5]"
-                  onClick={() => onPromptChange(preset)}
+                  onClick={() => onPromptChange(preset.prompt)}
                 >
-                  {preset}
+                  {preset.label}
                 </Button>
               ))}
             </div>
@@ -1586,6 +1608,13 @@ function EmptyAvailability({
   return (
     <div className="flex min-h-[340px] flex-col items-center justify-center rounded-lg border border-[#e5e7eb] bg-white px-6 text-center">
       <Avatar className="size-16 bg-[#f1f2f5]">
+        {staffMember?.profilePhotoUrl ? (
+          <AvatarImage
+            src={staffMember.profilePhotoUrl}
+            alt={`${staffMember.displayName} profile photo`}
+            className="object-cover object-center"
+          />
+        ) : null}
         <AvatarFallback className="text-xl font-bold text-[#635bff]">
           {staffMember ? getInitial(staffMember.displayName) : "R"}
         </AvatarFallback>

@@ -54,6 +54,7 @@ export type PublicBusinessWorkingHour = {
 export type PublicBusinessStaffMember = {
   id: string
   displayName: string
+  profilePhotoUrl: string | null
 }
 
 export type PublicBusinessPhoto = {
@@ -72,6 +73,7 @@ export type PublicBusinessReview = {
   id: string
   customerName: string
   customerInitial: string
+  customerProfilePhotoUrl: string | null
   rating: number
   comment: string
   createdAtUtc: string
