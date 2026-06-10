@@ -144,6 +144,14 @@ export type OwnerAppointmentRequest = {
 export type EmployeeAppointmentRequest = OwnerAppointmentRequest & {
   businessId: string
   businessName: string
+  stylePreview: AppointmentStylePreview | null
+}
+
+export type AppointmentStylePreview = {
+  id: string
+  originalImageUrl: string
+  generatedImageUrl: string
+  isPlaceholder: boolean
 }
 
 export type OwnerAppointmentRequestDecision = {
@@ -226,6 +234,7 @@ export type EmployeeAppointment = {
   customerFullName: string
   priceAmount: number
   currencyCode: string
+  stylePreview: AppointmentStylePreview | null
 }
 
 export type OwnerAppointment = {

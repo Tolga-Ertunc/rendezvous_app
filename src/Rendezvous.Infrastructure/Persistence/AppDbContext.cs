@@ -32,6 +32,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<Guid
     public DbSet<StaffMember> StaffMembers => Set<StaffMember>();
     public DbSet<StaffWorkingHour> StaffWorkingHours => Set<StaffWorkingHour>();
     public DbSet<Appointment> Appointments => Set<Appointment>();
+    public DbSet<AppointmentStylePreview> AppointmentStylePreviews => Set<AppointmentStylePreview>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<PendingEmailRegistration> PendingEmailRegistrations => Set<PendingEmailRegistration>();
 

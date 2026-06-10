@@ -72,6 +72,7 @@ builder.Services.AddScoped<AppointmentNotificationService>();
 builder.Services.AddScoped<EmailConfirmationService>();
 builder.Services.AddScoped<AppointmentEmailService>();
 builder.Services.AddScoped<BusinessPhotoStorageService>();
+builder.Services.AddScoped<AppointmentStylePreviewStorageService>();
 builder.Services.AddScoped<ApplicationRoleSeeder>();
 if (!builder.Environment.IsEnvironment("Testing"))
 {

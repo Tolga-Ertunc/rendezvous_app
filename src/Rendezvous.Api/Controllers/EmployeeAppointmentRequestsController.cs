@@ -45,8 +45,7 @@ public class EmployeeAppointmentRequestsController : ControllerBase
 
         await lifecycleService.ProcessDueAppointmentsAsync(cancellationToken);
 
-        return await GetEmployeeAppointmentRequestsQuery(userId.Value)
-            .ToListAsync(cancellationToken);
+        return Ok(await GetEmployeeAppointmentRequestsAsync(userId.Value, cancellationToken));
     }
 
     [HttpPost("{appointmentId:guid}/approve")]
@@ -170,59 +169,65 @@ public class EmployeeAppointmentRequestsController : ControllerBase
             0);
     }
 
-    private IQueryable<EmployeeAppointmentRequestResponse> GetEmployeeAppointmentRequestsQuery(Guid userId)
+    private async Task<IReadOnlyList<EmployeeAppointmentRequestResponse>> GetEmployeeAppointmentRequestsAsync(
+        Guid userId,
+        CancellationToken cancellationToken)
     {
-        return dbContext.Appointments
-            .AsNoTracking()
-            .Where(appointment => appointment.Status == AppointmentStatus.Pending)
-            .Join(
-                dbContext.StaffMembers.AsNoTracking().Where(staffMember =>
+        var rows = await (
+            from appointment in dbContext.Appointments.AsNoTracking()
+            where appointment.Status == AppointmentStatus.Pending
+            join staffMember in dbContext.StaffMembers.AsNoTracking().Where(staffMember =>
                     staffMember.UserId == userId
-                    && staffMember.IsActive),
-                appointment => appointment.StaffMemberId,
-                staffMember => staffMember.Id,
-                (appointment, staffMember) => new { appointment, staffMember })
-            .Join(
-                dbContext.BusinessMemberships.AsNoTracking().Where(membership =>
+                    && staffMember.IsActive)
+                on appointment.StaffMemberId equals staffMember.Id
+            join membership in dbContext.BusinessMemberships.AsNoTracking().Where(membership =>
                     membership.UserId == userId
                     && membership.Role == BusinessMembershipRole.Employee
-                    && membership.Status == BusinessMembershipStatus.Active),
-                row => row.appointment.BusinessId,
-                membership => membership.BusinessId,
-                (row, membership) => row)
-            .Join(
-                dbContext.Businesses.AsNoTracking(),
-                row => row.appointment.BusinessId,
-                business => business.Id,
-                (row, business) => new { row.appointment, row.staffMember, business })
-            .Join(
-                dbContext.BusinessServices.AsNoTracking(),
-                row => row.appointment.BusinessServiceId,
-                service => service.Id,
-                (row, service) => new { row.appointment, row.staffMember, row.business, service })
-            .Join(
-                dbContext.Users.AsNoTracking(),
-                row => row.staffMember.UserId,
-                user => user.Id,
-                (row, staffUser) => new { row.appointment, row.business, row.service, staffUser })
-            .Join(
-                dbContext.Users.AsNoTracking(),
-                row => row.appointment.CustomerUserId,
-                user => user.Id,
-                (row, user) => new { row.appointment, row.business, row.service, row.staffUser, user })
-            .OrderBy(row => row.appointment.StartsAtUtc)
+                    && membership.Status == BusinessMembershipStatus.Active)
+                on appointment.BusinessId equals membership.BusinessId
+            join business in dbContext.Businesses.AsNoTracking()
+                on appointment.BusinessId equals business.Id
+            join service in dbContext.BusinessServices.AsNoTracking()
+                on appointment.BusinessServiceId equals service.Id
+            join staffUser in dbContext.Users.AsNoTracking()
+                on staffMember.UserId equals staffUser.Id
+            join customerUser in dbContext.Users.AsNoTracking()
+                on appointment.CustomerUserId equals customerUser.Id
+            join preview in dbContext.AppointmentStylePreviews.AsNoTracking()
+                on appointment.Id equals preview.AppointmentId into previewRows
+            from preview in previewRows.DefaultIfEmpty()
+            orderby appointment.StartsAtUtc
+            select new EmployeeAppointmentRequestRow(
+                appointment.Id,
+                appointment.Status.ToString(),
+                appointment.StartsAtUtc,
+                appointment.EndsAtUtc,
+                business.Id,
+                business.Name,
+                service.Name,
+                ((staffUser.FirstName ?? string.Empty) + " " + (staffUser.LastName ?? string.Empty)).Trim(),
+                ((customerUser.FirstName ?? string.Empty) + " " + (customerUser.LastName ?? string.Empty)).Trim(),
+                appointment.PriceAmount,
+                appointment.CurrencyCode,
+                preview == null ? null : preview.Id,
+                preview != null && preview.IsPlaceholder))
+            .ToListAsync(cancellationToken);
+
+        return rows
             .Select(row => new EmployeeAppointmentRequestResponse(
-                row.appointment.Id,
-                row.appointment.Status.ToString(),
-                row.appointment.StartsAtUtc,
-                row.appointment.EndsAtUtc,
-                row.business.Id,
-                row.business.Name,
-                row.service.Name,
-                ((row.staffUser.FirstName ?? string.Empty) + " " + (row.staffUser.LastName ?? string.Empty)).Trim(),
-                ((row.user.FirstName ?? string.Empty) + " " + (row.user.LastName ?? string.Empty)).Trim(),
-                row.appointment.PriceAmount,
-                row.appointment.CurrencyCode));
+                row.Id,
+                row.Status,
+                row.StartsAtUtc,
+                row.EndsAtUtc,
+                row.BusinessId,
+                row.BusinessName,
+                row.ServiceName,
+                row.StaffDisplayName,
+                row.CustomerFullName,
+                row.PriceAmount,
+                row.CurrencyCode,
+                BuildStylePreviewResponse(row.StylePreviewId, row.StylePreviewIsPlaceholder)))
+            .ToList();
     }
 
     private IQueryable<Appointment> GetEmployeeAppointmentQuery(Guid userId, Guid appointmentId)
@@ -254,6 +259,39 @@ public class EmployeeAppointmentRequestsController : ControllerBase
             ? userId
             : null;
     }
+
+    private static AppointmentStylePreviewResponse? BuildStylePreviewResponse(
+        Guid? previewId,
+        bool isPlaceholder)
+    {
+        return previewId.HasValue
+            ? new AppointmentStylePreviewResponse(
+                previewId.Value,
+                BuildImageUrl(previewId.Value, "original"),
+                BuildImageUrl(previewId.Value, "generated"),
+                isPlaceholder)
+            : null;
+    }
+
+    private static string BuildImageUrl(Guid previewId, string imageKind)
+    {
+        return $"/backend-api/appointment-style-previews/{previewId}/{imageKind}";
+    }
+
+    private sealed record EmployeeAppointmentRequestRow(
+        Guid Id,
+        string Status,
+        DateTimeOffset StartsAtUtc,
+        DateTimeOffset EndsAtUtc,
+        Guid BusinessId,
+        string BusinessName,
+        string ServiceName,
+        string StaffDisplayName,
+        string CustomerFullName,
+        decimal PriceAmount,
+        string CurrencyCode,
+        Guid? StylePreviewId,
+        bool StylePreviewIsPlaceholder);
 }
 
 public sealed record EmployeeAppointmentRequestResponse(
@@ -267,7 +305,8 @@ public sealed record EmployeeAppointmentRequestResponse(
     string StaffDisplayName,
     string CustomerFullName,
     decimal PriceAmount,
-    string CurrencyCode);
+    string CurrencyCode,
+    AppointmentStylePreviewResponse? StylePreview);
 
 public sealed record EmployeeAppointmentRequestDecisionResponse(
     Guid Id,

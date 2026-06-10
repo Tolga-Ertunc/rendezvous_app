@@ -97,6 +97,28 @@ public class AppointmentRequestsController : ControllerBase
             return NotFound();
         }
 
+        var nowUtc = DateTimeOffset.UtcNow;
+        AppointmentStylePreview? stylePreview = null;
+        if (request.StylePreviewId.HasValue)
+        {
+            stylePreview = await dbContext.AppointmentStylePreviews
+                .SingleOrDefaultAsync(
+                    preview =>
+                        preview.Id == request.StylePreviewId.Value
+                        && preview.CustomerUserId == customerUserId.Value
+                        && preview.BusinessId == request.BusinessId
+                        && preview.BusinessServiceId == request.ServiceId
+                        && preview.StaffMemberId == request.StaffMemberId
+                        && preview.AppointmentId == null
+                        && preview.ExpiresAtUtc >= nowUtc,
+                    cancellationToken);
+
+            if (stylePreview is null)
+            {
+                return BadRequest(new { message = "Style preview cannot be used for this appointment." });
+            }
+        }
+
         var timeZone = TimeZoneInfo.FindSystemTimeZoneById(business.TimeZoneId);
         var localStart = TimeZoneInfo.ConvertTime(request.StartsAtUtc, timeZone);
         var localDate = DateOnly.FromDateTime(localStart.DateTime);
@@ -106,7 +128,7 @@ public class AppointmentRequestsController : ControllerBase
         var startsAtUtc = request.StartsAtUtc.ToUniversalTime();
         var endsAtUtc = ConvertLocalToUtc(localDate, localEndTime, timeZone);
 
-        if (startsAtUtc <= DateTimeOffset.UtcNow || localStartTime.Ticks % SlotStep.Ticks != 0)
+        if (startsAtUtc <= nowUtc || localStartTime.Ticks % SlotStep.Ticks != 0)
         {
             return BadRequest(new { message = "Selected slot is not available." });
         }
@@ -180,6 +202,10 @@ public class AppointmentRequestsController : ControllerBase
         };
 
         dbContext.Appointments.Add(appointment);
+        if (stylePreview is not null)
+        {
+            stylePreview.AppointmentId = appointment.Id;
+        }
 
         var ownerUserIds = await dbContext.BusinessMemberships
             .AsNoTracking()
@@ -207,7 +233,14 @@ public class AppointmentRequestsController : ControllerBase
                     : "/employee/requests");
         }
 
-        await dbContext.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return BadRequest(new { message = "Style preview cannot be used for this appointment." });
+        }
 
         return Created(
             $"/api/booking/appointment-requests/{appointment.Id}",
@@ -252,7 +285,8 @@ public sealed record CreateAppointmentRequest(
     Guid BusinessId,
     Guid ServiceId,
     Guid StaffMemberId,
-    DateTimeOffset StartsAtUtc);
+    DateTimeOffset StartsAtUtc,
+    Guid? StylePreviewId = null);
 
 public sealed record AppointmentRequestResponse(
     Guid Id,

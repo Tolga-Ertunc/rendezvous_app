@@ -52,6 +52,7 @@ import type {
   PublicBusinessService,
   PublicBusinessStaffMember,
 } from "@/lib/public-api"
+import { useAuthenticatedImageUrl } from "@/lib/use-authenticated-image-url"
 import { cn } from "@/lib/utils"
 
 type BookingStep =
@@ -497,6 +498,10 @@ export function PublicBookingFlow({
         serviceId: selectedService.id,
         staffMemberId: selectedStaff.staffMemberId,
         startsAtUtc: selectedSlot.startsAtUtc,
+        stylePreviewId:
+          stylePreviewDecision === "used" && stylePreviewResult
+            ? stylePreviewResult.previewId
+            : undefined,
       })
 
       setAppointmentRequest(created)
@@ -1072,6 +1077,9 @@ function StylePreviewStep({
   onUse: () => void
   onDiscard: () => void
 }) {
+  const generatedPreviewImageUrl = useAuthenticatedImageUrl(
+    result?.generatedImageUrl ?? result?.imageUrl ?? ""
+  )
   const hasGenerationInput = Boolean(image && prompt.trim())
   const isCreateMode =
     decision === "create" || decision === "used" || decision === "discarded"
@@ -1181,13 +1189,20 @@ function StylePreviewStep({
                         Generating preview
                       </p>
                     </div>
-                  ) : result ? (
+                  ) : result && generatedPreviewImageUrl ? (
                     <div
                       className="h-full w-full rounded-lg border border-[#e5e7eb] bg-cover bg-center"
-                      style={{ backgroundImage: `url(${result.imageUrl})` }}
+                      style={{ backgroundImage: `url(${generatedPreviewImageUrl})` }}
                       role="img"
                       aria-label="Generated style preview"
                     />
+                  ) : result ? (
+                    <div className="flex h-full w-full animate-pulse flex-col items-center justify-center rounded-lg border border-[#e5e7eb] bg-white text-center">
+                      <WandSparkles className="mb-4 size-10 text-[#71717a]" aria-hidden="true" />
+                      <p className="text-lg font-bold text-[#111111]">
+                        Loading preview
+                      </p>
+                    </div>
                   ) : (
                     <div className="flex h-full w-full flex-col items-center justify-center rounded-lg border border-dashed border-[#d4d4d8] bg-white text-center">
                       <ImageIcon className="mb-4 size-10 text-[#71717a]" aria-hidden="true" />

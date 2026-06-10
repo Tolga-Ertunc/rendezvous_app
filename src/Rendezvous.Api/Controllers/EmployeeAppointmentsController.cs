@@ -78,46 +78,53 @@ public class EmployeeAppointmentsController : ControllerBase
                 && appointment.StartsAtUtc >= nowUtc);
         }
 
-        return await appointmentsQuery
-            .Join(
-                dbContext.Businesses.AsNoTracking(),
-                appointment => appointment.BusinessId,
-                business => business.Id,
-                (appointment, business) => new { appointment, business })
-            .Join(
-                dbContext.BusinessServices.AsNoTracking(),
-                row => row.appointment.BusinessServiceId,
-                service => service.Id,
-                (row, service) => new { row.appointment, row.business, service })
-            .Join(
-                dbContext.StaffMembers.AsNoTracking(),
-                row => row.appointment.StaffMemberId,
-                staffMember => staffMember.Id,
-                (row, staffMember) => new { row.appointment, row.business, row.service, staffMember })
-            .Join(
-                dbContext.Users.AsNoTracking(),
-                row => row.staffMember.UserId,
-                user => user.Id,
-                (row, staffUser) => new { row.appointment, row.business, row.service, staffUser })
-            .Join(
-                dbContext.Users.AsNoTracking(),
-                row => row.appointment.CustomerUserId,
-                user => user.Id,
-                (row, user) => new { row.appointment, row.business, row.service, row.staffUser, user })
-            .OrderBy(row => row.appointment.StartsAtUtc)
-            .Select(row => new EmployeeAppointmentResponse(
-                row.appointment.Id,
-                row.appointment.Status.ToString(),
-                row.appointment.StartsAtUtc,
-                row.appointment.EndsAtUtc,
-                row.business.Id,
-                row.business.Name,
-                row.service.Name,
-                ((row.staffUser.FirstName ?? string.Empty) + " " + (row.staffUser.LastName ?? string.Empty)).Trim(),
-                ((row.user.FirstName ?? string.Empty) + " " + (row.user.LastName ?? string.Empty)).Trim(),
-                row.appointment.PriceAmount,
-                row.appointment.CurrencyCode))
+        var rows = await (
+            from appointment in appointmentsQuery
+            join business in dbContext.Businesses.AsNoTracking()
+                on appointment.BusinessId equals business.Id
+            join service in dbContext.BusinessServices.AsNoTracking()
+                on appointment.BusinessServiceId equals service.Id
+            join staffMember in dbContext.StaffMembers.AsNoTracking()
+                on appointment.StaffMemberId equals staffMember.Id
+            join staffUser in dbContext.Users.AsNoTracking()
+                on staffMember.UserId equals staffUser.Id
+            join customerUser in dbContext.Users.AsNoTracking()
+                on appointment.CustomerUserId equals customerUser.Id
+            join preview in dbContext.AppointmentStylePreviews.AsNoTracking()
+                on appointment.Id equals preview.AppointmentId into previewRows
+            from preview in previewRows.DefaultIfEmpty()
+            orderby appointment.StartsAtUtc
+            select new EmployeeAppointmentRow(
+                appointment.Id,
+                appointment.Status.ToString(),
+                appointment.StartsAtUtc,
+                appointment.EndsAtUtc,
+                business.Id,
+                business.Name,
+                service.Name,
+                ((staffUser.FirstName ?? string.Empty) + " " + (staffUser.LastName ?? string.Empty)).Trim(),
+                ((customerUser.FirstName ?? string.Empty) + " " + (customerUser.LastName ?? string.Empty)).Trim(),
+                appointment.PriceAmount,
+                appointment.CurrencyCode,
+                preview == null ? null : preview.Id,
+                preview != null && preview.IsPlaceholder))
             .ToListAsync(cancellationToken);
+
+        return rows
+            .Select(row => new EmployeeAppointmentResponse(
+                row.Id,
+                row.Status,
+                row.StartsAtUtc,
+                row.EndsAtUtc,
+                row.BusinessId,
+                row.BusinessName,
+                row.ServiceName,
+                row.StaffDisplayName,
+                row.CustomerFullName,
+                row.PriceAmount,
+                row.CurrencyCode,
+                BuildStylePreviewResponse(row.StylePreviewId, row.StylePreviewIsPlaceholder)))
+            .ToList();
     }
 
     [HttpPost("{appointmentId:guid}/cancel")]
@@ -260,6 +267,24 @@ public class EmployeeAppointmentsController : ControllerBase
             : null;
     }
 
+    private static AppointmentStylePreviewResponse? BuildStylePreviewResponse(
+        Guid? previewId,
+        bool isPlaceholder)
+    {
+        return previewId.HasValue
+            ? new AppointmentStylePreviewResponse(
+                previewId.Value,
+                BuildImageUrl(previewId.Value, "original"),
+                BuildImageUrl(previewId.Value, "generated"),
+                isPlaceholder)
+            : null;
+    }
+
+    private static string BuildImageUrl(Guid previewId, string imageKind)
+    {
+        return $"/backend-api/appointment-style-previews/{previewId}/{imageKind}";
+    }
+
     private static bool TryApplyAppointmentFilters(
         ref IQueryable<Appointment> query,
         string? status,
@@ -299,6 +324,20 @@ public class EmployeeAppointmentsController : ControllerBase
         return true;
     }
 
+    private sealed record EmployeeAppointmentRow(
+        Guid Id,
+        string Status,
+        DateTimeOffset StartsAtUtc,
+        DateTimeOffset EndsAtUtc,
+        Guid BusinessId,
+        string BusinessName,
+        string ServiceName,
+        string StaffDisplayName,
+        string CustomerFullName,
+        decimal PriceAmount,
+        string CurrencyCode,
+        Guid? StylePreviewId,
+        bool StylePreviewIsPlaceholder);
 }
 
 public sealed record EmployeeAppointmentResponse(
@@ -312,7 +351,8 @@ public sealed record EmployeeAppointmentResponse(
     string StaffDisplayName,
     string CustomerFullName,
     decimal PriceAmount,
-    string CurrencyCode);
+    string CurrencyCode,
+    AppointmentStylePreviewResponse? StylePreview);
 
 public sealed record EmployeeAppointmentDecisionResponse(
     Guid Id,

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import type React from "react"
-import { Check, Clock, UserX, X } from "lucide-react"
+import { Check, Clock, Eye, ImageIcon, UserX, X } from "lucide-react"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
@@ -14,6 +14,14 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
@@ -34,9 +42,11 @@ import {
 } from "@/lib/auth-api"
 import type {
   AppointmentFilters,
+  AppointmentStylePreview,
   EmployeeAppointment,
   EmployeeAppointmentRequest,
 } from "@/lib/auth-api"
+import { useAuthenticatedImageUrl } from "@/lib/use-authenticated-image-url"
 
 export function EmployeeAppointmentRequestsPanel() {
   const [requests, setRequests] = useState<EmployeeAppointmentRequest[]>([])
@@ -410,6 +420,7 @@ function EmployeeManagedAppointmentRow({
               Price: {item.priceAmount} {item.currencyCode}
             </p>
           </div>
+          <AppointmentStylePreviewBlock preview={item.stylePreview} />
         </div>
         <AppointmentActionButtons
           appointment={item}
@@ -566,6 +577,7 @@ function EmployeeAppointmentRow({
               Price: {item.priceAmount} {item.currencyCode}
             </p>
           </div>
+          <AppointmentStylePreviewBlock preview={item.stylePreview} />
         </div>
         <div className="flex flex-wrap gap-2">
           <Button
@@ -594,6 +606,121 @@ function EmployeeAppointmentRow({
             </Button>
           ) : null}
         </div>
+      </div>
+    </div>
+  )
+}
+
+function AppointmentStylePreviewBlock({
+  preview,
+}: {
+  preview: AppointmentStylePreview | null
+}) {
+  const originalImageUrl = useAuthenticatedImageUrl(preview?.originalImageUrl ?? "")
+  const generatedImageUrl = useAuthenticatedImageUrl(preview?.generatedImageUrl ?? "")
+
+  if (!preview) {
+    return null
+  }
+
+  return (
+    <Dialog>
+      <DialogTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          className="h-auto w-full justify-start rounded-lg border-border bg-muted/20 p-2 text-left hover:bg-muted sm:w-fit"
+        >
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex shrink-0 items-center gap-1.5">
+              <PreviewThumbnail
+                label="Original"
+                imageUrl={originalImageUrl}
+              />
+              <PreviewThumbnail
+                label="AI result"
+                imageUrl={generatedImageUrl}
+              />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+                <Eye className="size-4" aria-hidden="true" />
+                <span>View preview</span>
+              </div>
+              {preview.isPlaceholder ? (
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Placeholder mode
+                </p>
+              ) : null}
+            </div>
+          </div>
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-4xl">
+        <DialogHeader>
+          <DialogTitle>Style preview</DialogTitle>
+          <DialogDescription>
+            Original photo and AI result for this appointment.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-4 md:grid-cols-2">
+          <PreviewDialogImage label="Original photo" imageUrl={originalImageUrl} />
+          <PreviewDialogImage label="AI result" imageUrl={generatedImageUrl} />
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function PreviewThumbnail({
+  label,
+  imageUrl,
+}: {
+  label: string
+  imageUrl: string
+}) {
+  return (
+    <span className="flex size-12 overflow-hidden rounded-md border border-border bg-background">
+      {imageUrl ? (
+        <span
+          className="h-full w-full bg-cover bg-center"
+          style={{ backgroundImage: `url(${imageUrl})` }}
+          role="img"
+          aria-label={label}
+        />
+      ) : (
+        <span className="flex h-full w-full items-center justify-center text-muted-foreground">
+          <ImageIcon className="size-4" aria-hidden="true" />
+        </span>
+      )}
+    </span>
+  )
+}
+
+function PreviewDialogImage({
+  label,
+  imageUrl,
+}: {
+  label: string
+  imageUrl: string
+}) {
+  return (
+    <div className="space-y-2">
+      <p className="text-sm font-medium text-foreground">{label}</p>
+      <div className="flex aspect-square overflow-hidden rounded-lg border border-border bg-muted">
+        {imageUrl ? (
+          <div
+            className="h-full w-full bg-cover bg-center"
+            style={{ backgroundImage: `url(${imageUrl})` }}
+            role="img"
+            aria-label={label}
+          />
+        ) : (
+          <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-muted-foreground">
+            <ImageIcon className="size-8" aria-hidden="true" />
+            <p className="text-sm">Loading image.</p>
+          </div>
+        )}
       </div>
     </div>
   )

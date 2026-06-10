@@ -1,7 +1,9 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Rendezvous.Api.Services;
+using Rendezvous.Domain.Appointments;
 using Rendezvous.Domain.Businesses;
 using Rendezvous.Infrastructure.Identity;
 using Rendezvous.Infrastructure.Persistence;
@@ -15,21 +17,31 @@ public class BookingStylePreviewsController : ControllerBase
 {
     private readonly AppDbContext dbContext;
     private readonly StylePreviewGenerationService stylePreviewGenerationService;
+    private readonly AppointmentStylePreviewStorageService stylePreviewStorageService;
 
     public BookingStylePreviewsController(
         AppDbContext dbContext,
-        StylePreviewGenerationService stylePreviewGenerationService)
+        StylePreviewGenerationService stylePreviewGenerationService,
+        AppointmentStylePreviewStorageService stylePreviewStorageService)
     {
         this.dbContext = dbContext;
         this.stylePreviewGenerationService = stylePreviewGenerationService;
+        this.stylePreviewStorageService = stylePreviewStorageService;
     }
 
     [HttpPost]
+    [Consumes("multipart/form-data")]
     [RequestSizeLimit(StylePreviewGenerationService.MaxUploadRequestSizeBytes)]
     public async Task<ActionResult<BookingStylePreviewResponse>> Create(
         [FromForm] CreateBookingStylePreviewRequest request,
         CancellationToken cancellationToken)
     {
+        var customerUserId = GetCurrentUserId();
+        if (customerUserId is null)
+        {
+            return Unauthorized();
+        }
+
         if (request.Image is null)
         {
             return BadRequest(new { message = "Photo file is required." });
@@ -75,11 +87,43 @@ public class BookingStylePreviewsController : ControllerBase
                 request.Prompt,
                 cancellationToken);
 
-            return Ok(new BookingStylePreviewResponse(
+            var stored = await stylePreviewStorageService.SaveAsync(
                 generated.PreviewId,
-                generated.ImageUrl,
-                generated.Prompt,
-                generated.IsPlaceholder));
+                request.Image,
+                generated.GeneratedImage,
+                cancellationToken);
+
+            var nowUtc = DateTimeOffset.UtcNow;
+            var preview = new AppointmentStylePreview
+            {
+                Id = generated.PreviewId,
+                CustomerUserId = customerUserId.Value,
+                BusinessId = request.BusinessId,
+                BusinessServiceId = request.ServiceId,
+                StaffMemberId = request.StaffMemberId,
+                OriginalStorageKey = stored.OriginalStorageKey,
+                OriginalContentType = stored.OriginalContentType,
+                OriginalFileSizeBytes = stored.OriginalFileSizeBytes,
+                GeneratedStorageKey = stored.GeneratedStorageKey,
+                GeneratedContentType = stored.GeneratedContentType,
+                GeneratedFileSizeBytes = stored.GeneratedFileSizeBytes,
+                IsPlaceholder = generated.IsPlaceholder,
+                CreatedAtUtc = nowUtc,
+                ExpiresAtUtc = nowUtc.AddHours(24)
+            };
+
+            dbContext.AppointmentStylePreviews.Add(preview);
+            await dbContext.SaveChangesAsync(cancellationToken);
+
+            var originalImageUrl = BuildImageUrl(preview.Id, "original");
+            var generatedImageUrl = BuildImageUrl(preview.Id, "generated");
+
+            return Ok(new BookingStylePreviewResponse(
+                preview.Id,
+                originalImageUrl,
+                generatedImageUrl,
+                generatedImageUrl,
+                preview.IsPlaceholder));
         }
         catch (StylePreviewValidationException exception)
         {
@@ -94,6 +138,20 @@ public class BookingStylePreviewsController : ControllerBase
             return StatusCode(StatusCodes.Status502BadGateway, new { message = "Style preview could not be generated." });
         }
     }
+
+    private Guid? GetCurrentUserId()
+    {
+        var userIdValue = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+        return Guid.TryParse(userIdValue, out var userId)
+            ? userId
+            : null;
+    }
+
+    private static string BuildImageUrl(Guid previewId, string imageKind)
+    {
+        return $"/backend-api/appointment-style-previews/{previewId}/{imageKind}";
+    }
 }
 
 public sealed class CreateBookingStylePreviewRequest
@@ -107,6 +165,7 @@ public sealed class CreateBookingStylePreviewRequest
 
 public sealed record BookingStylePreviewResponse(
     Guid PreviewId,
+    string OriginalImageUrl,
+    string GeneratedImageUrl,
     string ImageUrl,
-    string Prompt,
     bool IsPlaceholder);

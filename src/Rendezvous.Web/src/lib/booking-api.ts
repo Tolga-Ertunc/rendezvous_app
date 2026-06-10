@@ -31,8 +31,9 @@ export type AppointmentRequest = {
 
 export type StylePreview = {
   previewId: string
+  originalImageUrl: string
+  generatedImageUrl: string
   imageUrl: string
-  prompt: string
   isPlaceholder: boolean
 }
 
@@ -53,6 +54,7 @@ export function createAppointmentRequest(input: {
   serviceId: string
   staffMemberId: string
   startsAtUtc: string
+  stylePreviewId?: string
 }) {
   return apiRequest<AppointmentRequest>("/booking/appointment-requests", {
     method: "POST",

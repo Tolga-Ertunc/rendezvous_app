@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.RegularExpressions;
 using FluentAssertions;
@@ -88,6 +89,114 @@ public class AuthAndBusinessFlowTests : IClassFixture<RendezvousApiFactory>
         var appointmentRequest = await response.Content.ReadFromJsonAsync<AppointmentRequestResponse>();
 
         appointmentRequest!.Status.Should().Be("Pending");
+    }
+
+    [Fact]
+    public async Task Customer_can_attach_style_preview_and_assigned_employee_can_view_images()
+    {
+        var (_, owner) = await RegisterAndGetCurrentUserAsync("style-preview-owner@example.com");
+        var setup = await CreateBookableBusinessAsync(owner.Id, "Style Preview Barber");
+        var (employeeToken, employee) = await RegisterAndGetCurrentUserAsync("style-preview-employee@example.com");
+        var employeeStaffId = await AddEmployeeAsync(setup.BusinessId, employee.Id, setup.LocalDate);
+        var customerToken = await RegisterAsync("style-preview-customer@example.com");
+        client.DefaultRequestHeaders.Authorization = new("Bearer", customerToken);
+        var preview = await CreateStylePreviewAsync(setup, employeeStaffId);
+
+        var requestResponse = await client.PostAsJsonAsync(
+            "/api/booking/appointment-requests",
+            new
+            {
+                businessId = setup.BusinessId,
+                serviceId = setup.ServiceId,
+                staffMemberId = employeeStaffId,
+                startsAtUtc = setup.StartsAtUtc,
+                stylePreviewId = preview.PreviewId
+            });
+
+        requestResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+        var appointmentRequest = await requestResponse.Content.ReadFromJsonAsync<AppointmentRequestResponse>();
+        var customerOriginalResponse = await client.GetAsync(
+            $"/api/appointment-style-previews/{preview.PreviewId}/original");
+
+        client.DefaultRequestHeaders.Authorization = new("Bearer", employeeToken);
+        var employeeRequests = await client.GetFromJsonAsync<IReadOnlyList<EmployeeAppointmentRequestListResponse>>(
+            "/api/employee/appointment-requests");
+        var employeeRequest = employeeRequests!.Single(request => request.Id == appointmentRequest!.Id);
+        var employeeGeneratedResponse = await client.GetAsync(
+            $"/api/appointment-style-previews/{preview.PreviewId}/generated");
+        var approveResponse = await client.PostAsync(
+            $"/api/employee/appointment-requests/{appointmentRequest!.Id}/approve",
+            content: null);
+        var employeeAppointments = await client.GetFromJsonAsync<IReadOnlyList<EmployeeAppointmentListResponse>>(
+            "/api/employee/appointments");
+
+        var otherCustomerToken = await RegisterAsync("style-preview-other@example.com");
+        client.DefaultRequestHeaders.Authorization = new("Bearer", otherCustomerToken);
+        var otherCustomerPreviewResponse = await client.GetAsync(
+            $"/api/appointment-style-previews/{preview.PreviewId}/generated");
+
+        preview.IsPlaceholder.Should().BeTrue();
+        preview.OriginalImageUrl.Should().Contain($"/appointment-style-previews/{preview.PreviewId}/original");
+        preview.GeneratedImageUrl.Should().Contain($"/appointment-style-previews/{preview.PreviewId}/generated");
+        preview.ImageUrl.Should().Be(preview.GeneratedImageUrl);
+        customerOriginalResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        employeeRequest.StylePreview.Should().NotBeNull();
+        employeeRequest.StylePreview!.Id.Should().Be(preview.PreviewId);
+        employeeRequest.StylePreview.OriginalImageUrl.Should().Be(preview.OriginalImageUrl);
+        employeeRequest.StylePreview.GeneratedImageUrl.Should().Be(preview.GeneratedImageUrl);
+        employeeGeneratedResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        approveResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        employeeAppointments!.Should().ContainSingle(appointment =>
+            appointment.Id == appointmentRequest.Id
+            && appointment.StylePreview != null
+            && appointment.StylePreview.Id == preview.PreviewId);
+        otherCustomerPreviewResponse.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task Appointment_request_rejects_unusable_style_preview()
+    {
+        var (_, owner) = await RegisterAndGetCurrentUserAsync("style-preview-guard-owner@example.com");
+        var setup = await CreateBookableBusinessAsync(owner.Id, "Style Preview Guard Barber");
+        var customerToken = await RegisterAsync("style-preview-guard-customer@example.com");
+        client.DefaultRequestHeaders.Authorization = new("Bearer", customerToken);
+        var preview = await CreateStylePreviewAsync(setup, setup.StaffMemberId);
+
+        var otherCustomerToken = await RegisterAsync("style-preview-guard-other@example.com");
+        client.DefaultRequestHeaders.Authorization = new("Bearer", otherCustomerToken);
+        var otherCustomerResponse = await client.PostAsJsonAsync(
+            "/api/booking/appointment-requests",
+            new
+            {
+                businessId = setup.BusinessId,
+                serviceId = setup.ServiceId,
+                staffMemberId = setup.StaffMemberId,
+                startsAtUtc = setup.StartsAtUtc,
+                stylePreviewId = preview.PreviewId
+            });
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var storedPreview = await dbContext.AppointmentStylePreviews.SingleAsync(candidate => candidate.Id == preview.PreviewId);
+            storedPreview.ExpiresAtUtc = DateTimeOffset.UtcNow.AddMinutes(-1);
+            await dbContext.SaveChangesAsync();
+        }
+
+        client.DefaultRequestHeaders.Authorization = new("Bearer", customerToken);
+        var expiredResponse = await client.PostAsJsonAsync(
+            "/api/booking/appointment-requests",
+            new
+            {
+                businessId = setup.BusinessId,
+                serviceId = setup.ServiceId,
+                staffMemberId = setup.StaffMemberId,
+                startsAtUtc = setup.StartsAtUtc,
+                stylePreviewId = preview.PreviewId
+            });
+
+        otherCustomerResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        expiredResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
     [Fact]
@@ -1596,6 +1705,26 @@ public class AuthAndBusinessFlowTests : IClassFixture<RendezvousApiFactory>
         await dbContext.SaveChangesAsync();
     }
 
+    private async Task<BookingStylePreviewResponse> CreateStylePreviewAsync(
+        BookableBusinessSetup setup,
+        Guid staffMemberId)
+    {
+        using var formData = new MultipartFormDataContent();
+        formData.Add(new StringContent(setup.BusinessId.ToString()), "businessId");
+        formData.Add(new StringContent(setup.ServiceId.ToString()), "serviceId");
+        formData.Add(new StringContent(staffMemberId.ToString()), "staffMemberId");
+        formData.Add(new StringContent("short crop"), "prompt");
+
+        var imageContent = new ByteArrayContent([137, 80, 78, 71, 13, 10, 26, 10]);
+        imageContent.Headers.ContentType = new MediaTypeHeaderValue("image/png");
+        formData.Add(imageContent, "image", "customer.png");
+
+        var response = await client.PostAsync("/api/booking/style-previews", formData);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        return (await response.Content.ReadFromJsonAsync<BookingStylePreviewResponse>())!;
+    }
+
     private async Task<IReadOnlyList<Guid>> AddAppointmentsAsync(
         Guid customerUserId,
         BookableBusinessSetup setup)
@@ -1695,6 +1824,13 @@ public class AuthAndBusinessFlowTests : IClassFixture<RendezvousApiFactory>
 
     private sealed record AppointmentRequestResponse(Guid Id, string Status);
 
+    private sealed record BookingStylePreviewResponse(
+        Guid PreviewId,
+        string OriginalImageUrl,
+        string GeneratedImageUrl,
+        string ImageUrl,
+        bool IsPlaceholder);
+
     private sealed record AppointmentDecisionResponse(Guid Id, string Status);
 
     private sealed record AppointmentListResponse(
@@ -1757,6 +1893,20 @@ public class AuthAndBusinessFlowTests : IClassFixture<RendezvousApiFactory>
     private sealed record OwnerAppointmentRequestListResponse(
         Guid Id,
         string CustomerFullName);
+
+    private sealed record EmployeeAppointmentRequestListResponse(
+        Guid Id,
+        AppointmentStylePreviewResponse? StylePreview);
+
+    private sealed record EmployeeAppointmentListResponse(
+        Guid Id,
+        AppointmentStylePreviewResponse? StylePreview);
+
+    private sealed record AppointmentStylePreviewResponse(
+        Guid Id,
+        string OriginalImageUrl,
+        string GeneratedImageUrl,
+        bool IsPlaceholder);
 
     private sealed record AvailabilityExceptionResponse(
         Guid Id,

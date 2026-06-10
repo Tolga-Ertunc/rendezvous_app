@@ -28,12 +28,19 @@ export async function apiRequest<T>(
   return sendRequest<T>(path, options, true)
 }
 
+export async function apiBlobRequest(
+  path: string,
+  options: ApiRequestOptions = {}
+): Promise<Blob> {
+  return sendBlobRequest(path, options, true)
+}
+
 async function sendRequest<T>(
   path: string,
   options: ApiRequestOptions,
   allowRefresh: boolean
 ): Promise<T> {
-  const response = await fetch(`${apiBasePath}${path}`, {
+  const response = await fetch(resolveApiUrl(path), {
     ...options,
     headers: createHeaders(options.headers, options.body),
   })
@@ -58,6 +65,32 @@ async function sendRequest<T>(
   return (await response.json()) as T
 }
 
+async function sendBlobRequest(
+  path: string,
+  options: ApiRequestOptions,
+  allowRefresh: boolean
+): Promise<Blob> {
+  const response = await fetch(resolveApiUrl(path), {
+    ...options,
+    headers: createHeaders(options.headers, options.body),
+  })
+
+  if (
+    response.status === 401 &&
+    allowRefresh &&
+    !options.skipAuthRefresh &&
+    (await refreshAccessToken())
+  ) {
+    return sendBlobRequest(path, options, false)
+  }
+
+  if (!response.ok) {
+    throw new ApiError("Request failed", response.status, await readErrorBody(response))
+  }
+
+  return response.blob()
+}
+
 async function readErrorBody(response: Response) {
   const contentType = response.headers.get("content-type") ?? ""
   if (!contentType.includes("application/json")) {
@@ -69,6 +102,18 @@ async function readErrorBody(response: Response) {
   } catch {
     return undefined
   }
+}
+
+function resolveApiUrl(path: string) {
+  if (
+    path.startsWith(apiBasePath)
+    || path.startsWith("http://")
+    || path.startsWith("https://")
+  ) {
+    return path
+  }
+
+  return `${apiBasePath}${path}`
 }
 
 function createHeaders(headers: HeadersInit | undefined, body?: BodyInit | null) {

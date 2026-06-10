@@ -49,7 +49,7 @@ public class StylePreviewGenerationService
         {
             if (environment.IsDevelopment() || environment.IsEnvironment("Testing"))
             {
-                return CreatePlaceholderResult(normalizedPrompt);
+                return CreatePlaceholderResult();
             }
 
             throw new StylePreviewConfigurationException("Style preview generation is not configured.");
@@ -87,7 +87,7 @@ public class StylePreviewGenerationService
 
             if (response.StatusCode == HttpStatusCode.TooManyRequests && CanUsePlaceholderFallback())
             {
-                return CreatePlaceholderResult(normalizedPrompt);
+                return CreatePlaceholderResult();
             }
 
             throw new StylePreviewGenerationException("Style preview could not be generated.");
@@ -109,10 +109,20 @@ public class StylePreviewGenerationService
             ? "image/png"
             : imagePart.MimeType;
 
+        byte[] imageBytes;
+        try
+        {
+            imageBytes = Convert.FromBase64String(imagePart.Data);
+        }
+        catch (FormatException exception)
+        {
+            logger.LogWarning(exception, "Style preview response image data was not valid base64.");
+            throw new StylePreviewGenerationException("Style preview could not be generated.");
+        }
+
         return new StylePreviewGenerationResult(
             Guid.NewGuid(),
-            $"data:{mimeType};base64,{imagePart.Data}",
-            normalizedPrompt,
+            new GeneratedStylePreviewImage(mimeType, imageBytes),
             false);
     }
 
@@ -249,9 +259,8 @@ public class StylePreviewGenerationService
             + prompt;
     }
 
-    private static StylePreviewGenerationResult CreatePlaceholderResult(string prompt)
+    private static StylePreviewGenerationResult CreatePlaceholderResult()
     {
-        var safePrompt = EscapeSvgText(prompt);
         var svg = $"""
             <svg xmlns="http://www.w3.org/2000/svg" width="960" height="960" viewBox="0 0 960 960">
               <rect width="960" height="960" fill="#f4f4f5"/>
@@ -259,35 +268,25 @@ public class StylePreviewGenerationService
               <circle cx="480" cy="376" r="128" fill="#e4e4e7"/>
               <path d="M304 716c24-112 96-176 176-176s152 64 176 176" fill="#d4d4d8"/>
               <text x="480" y="188" text-anchor="middle" font-family="Arial, sans-serif" font-size="38" font-weight="700" fill="#111111">Style preview placeholder</text>
-              <text x="480" y="794" text-anchor="middle" font-family="Arial, sans-serif" font-size="26" fill="#71717a">{safePrompt}</text>
+              <text x="480" y="794" text-anchor="middle" font-family="Arial, sans-serif" font-size="26" fill="#71717a">Local testing image</text>
             </svg>
             """;
-        var data = Convert.ToBase64String(Encoding.UTF8.GetBytes(svg));
 
         return new StylePreviewGenerationResult(
             Guid.NewGuid(),
-            $"data:image/svg+xml;base64,{data}",
-            prompt,
+            new GeneratedStylePreviewImage("image/svg+xml", Encoding.UTF8.GetBytes(svg)),
             true);
-    }
-
-    private static string EscapeSvgText(string value)
-    {
-        var trimmed = value.Length > 44 ? value[..44] + "..." : value;
-
-        return trimmed
-            .Replace("&", "&amp;", StringComparison.Ordinal)
-            .Replace("<", "&lt;", StringComparison.Ordinal)
-            .Replace(">", "&gt;", StringComparison.Ordinal)
-            .Replace("\"", "&quot;", StringComparison.Ordinal);
     }
 }
 
 public sealed record StylePreviewGenerationResult(
     Guid PreviewId,
-    string ImageUrl,
-    string Prompt,
+    GeneratedStylePreviewImage GeneratedImage,
     bool IsPlaceholder);
+
+public sealed record GeneratedStylePreviewImage(
+    string ContentType,
+    byte[] Bytes);
 
 public class StylePreviewValidationException : Exception
 {
